@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>鸟语 · Fugleramme</title>
+    <style>
+      :root {
+        --paper: #efe7d6;
+        --paper-2: #e5dac3;
+        --ink: #2c2620;
+        --ink-soft: #6b5f4d;
+        --rule: #c9b997;
+        --accent: #7c5b34;
+        --card: #f7f1e4;
+        color-scheme: light;
+      }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        background:
+          radial-gradient(120% 90% at 50% -10%, #f6f0e2 0%, var(--paper) 45%, var(--paper-2) 100%);
+        color: var(--ink);
+        font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia,
+          "Songti TC", "Noto Serif CJK TC", "Source Han Serif TC", serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      .sheet {
+        max-width: 1500px;
+        margin: 0 auto;
+        padding: clamp(18px, 3vw, 48px);
+        min-height: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: clamp(18px, 2.4vw, 32px);
+      }
+      header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+        border-bottom: 1px solid var(--rule);
+        padding-bottom: 14px;
+      }
+      h1 {
+        font-size: clamp(28px, 4vw, 54px);
+        margin: 0;
+        font-weight: 500;
+        letter-spacing: 0.04em;
+      }
+      h1 small {
+        display: block;
+        font-size: clamp(11px, 1.1vw, 15px);
+        letter-spacing: 0.34em;
+        text-transform: uppercase;
+        color: var(--ink-soft);
+        font-weight: 400;
+        margin-top: 6px;
+      }
+      .meta { color: var(--ink-soft); font-size: clamp(12px, 1.2vw, 15px); text-align: right; }
+      .meta b { color: var(--ink); font-weight: 600; }
+
+      .controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+      .toggle {
+        display: inline-flex;
+        border: 1px solid var(--ink);
+        border-radius: 999px;
+        overflow: hidden;
+        background: var(--card);
+      }
+      .toggle button {
+        font: inherit;
+        font-size: clamp(12px, 1.2vw, 16px);
+        padding: 8px 20px;
+        border: 0;
+        background: transparent;
+        color: var(--ink-soft);
+        cursor: pointer;
+        letter-spacing: 0.08em;
+      }
+      .toggle button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+      select {
+        font: inherit;
+        font-size: clamp(12px, 1.2vw, 15px);
+        padding: 7px 10px;
+        border: 1px solid var(--rule);
+        border-radius: 999px;
+        background: var(--card);
+        color: var(--ink);
+      }
+
+      main { flex: 1; }
+      .grid {
+        display: grid;
+        gap: clamp(14px, 1.6vw, 26px);
+        grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
+        align-items: start;
+      }
+      .bird {
+        background: var(--card);
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        padding: 14px 16px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        box-shadow: 0 1px 0 #fff8 inset, 0 8px 18px -18px #4b3d29;
+      }
+      .shot {
+        aspect-ratio: 4 / 3;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f1e8d6;
+        border-radius: 3px;
+        overflow: hidden;
+        position: relative;
+      }
+      .shot.plate { background: none; }
+      .shot img { width: 100%; height: 100%; object-fit: contain; display: block; }
+      .shot.photo img { object-fit: cover; }
+      .shot .none { color: var(--ink-soft); font-size: 13px; letter-spacing: 0.2em; }
+      .shot .tag {
+        position: absolute; left: 8px; bottom: 6px;
+        font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+        color: var(--ink-soft); background: #f7f1e4cc; padding: 2px 6px; border-radius: 2px;
+      }
+      .names .zh { font-size: clamp(20px, 2vw, 27px); line-height: 1.2; }
+      .names .en { font-size: clamp(13px, 1.3vw, 17px); color: var(--ink); margin-top: 2px; }
+      .names .py { font-size: clamp(11px, 1.1vw, 13px); color: var(--ink-soft); letter-spacing: 0.06em; margin-top: 3px; }
+      .foot {
+        display: flex; justify-content: space-between; align-items: center; gap: 8px;
+        font-size: 11px; color: var(--ink-soft);
+        border-top: 1px dotted var(--rule); padding-top: 7px;
+      }
+      .foot > span:first-child { white-space: nowrap; }
+      .foot .credit { max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .links { display: flex; gap: 8px; flex-wrap: wrap; }
+      .links a {
+        font-size: 11px; letter-spacing: 0.08em; text-decoration: none;
+        border: 1px solid var(--rule); border-radius: 999px; padding: 3px 10px;
+        color: var(--ink-soft);
+      }
+      .links a:hover, .links a:focus-visible { color: var(--ink); border-color: var(--ink); }
+      .empty {
+        text-align: center; color: var(--ink-soft);
+        padding: min(18vh, 120px) 20px; font-size: clamp(16px, 2vw, 24px);
+      }
+      .empty small { display: block; margin-top: 10px; font-size: 13px; letter-spacing: 0.2em; }
+      .banner {
+        margin: 0 0 12px; padding: 8px 14px; border-radius: 4px;
+        background: #f6d9d0; border: 1px solid #c98b76; color: #6d2b18; font-size: 14px;
+      }
+      footer { color: var(--ink-soft); font-size: 11px; letter-spacing: 0.06em; }
+      a { color: var(--accent); }
+      @media (prefers-color-scheme: dark) {
+        :root { color-scheme: dark; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="sheet">
+      <header>
+        <h1>鸟语<small>Fugleramme · BirdNET-Go</small></h1>
+        <div class="meta">
+          <div><b id="species">–</b> species · <b id="calls">–</b> calls in <b id="window">24h</b></div>
+          <div id="updated">–</div>
+        </div>
+      </header>
+
+      <div class="controls">
+        <div class="toggle" role="group" aria-label="Image style">
+          <button id="mode-plate" aria-pressed="false">插画 Illustration</button>
+          <button id="mode-photo" aria-pressed="true">照片 Photo</button>
+        </div>
+        <select id="hours" aria-label="Time window">
+          <option value="6">近 6 小时 · 6h</option>
+          <option value="24" selected>近 24 小时 · 24h</option>
+          <option value="72">近 3 日 · 72h</option>
+          <option value="168">近 7 日 · 7d</option>
+        </select>
+      </div>
+
+      <main>
+        <p id="banner" class="banner" hidden></p>
+        <div id="grid" class="grid"></div>
+        <div id="empty" class="empty">
+          <span id="empty-text">聆听中 — listening to the station</span>
+          <small id="empty-sub">POLLING BIRDNET-GO</small>
+        </div>
+      </main>
+
+      <footer>
+        detections from a self-hosted BirdNET-Go ·
+        plates: <a href="https://github.com/arnegiacomo/fugleramme" target="_blank" rel="noopener">fugleramme</a>
+        (CC BY-SA 4.0) · photos &amp; 中文名: iNaturalist
+      </footer>
+    </div>
+
+    <script type="module">
+      const grid = document.getElementById("grid");
+      const empty = document.getElementById("empty");
+      const banner = document.getElementById("banner");
+      const hoursEl = document.getElementById("hours");
+
+      // The frame is a picture frame: the chosen style sticks between visits.
+      let mode = localStorage.getItem("fugleramme.mode") || "photo";
+      let hours = Number(localStorage.getItem("fugleramme.hours")) || 24;
+      let last = null;
+      hoursEl.value = String(hours);
+      applyMode();
+
+      function applyMode() {
+        for (const m of ["plate", "photo"]) {
+          document.getElementById(`mode-${m}`).setAttribute("aria-pressed", String(m === mode));
+        }
+        localStorage.setItem("fugleramme.mode", mode);
+        render(last);
+      }
+      document.getElementById("mode-plate").onclick = () => { mode = "plate"; applyMode(); };
+      document.getElementById("mode-photo").onclick = () => { mode = "photo"; applyMode(); };
+      hoursEl.onchange = () => {
+        hours = Number(hoursEl.value);
+        localStorage.setItem("fugleramme.hours", String(hours));
+        load();
+      };
+
+
+      const clock = (ms) =>
+        new Date(ms).toLocaleString(undefined, {
+          month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit",
+        });
+      const ago = (ms) => {
+        const min = Math.round((Date.now() - ms) / 60000);
+        if (min < 1) return "just now";
+        if (min < 60) return `${min} min ago`;
+        if (min < 60 * 24) return `${Math.round(min / 60)} h ago`;
+        return `${Math.round(min / 1440)} d ago`;
+      };
+
+      // Only https URLs from Wikipedia/iNaturalist may reach href; anything else is dropped.
+      const safeUrl = (u, host) => {
+        try {
+          const url = new URL(u);
+          return url.protocol === "https:" && url.hostname.endsWith(host) ? url.href : null;
+        } catch {
+          return null;
+        }
+      };
+
+      function card(bird) {
+        const usePhoto = mode === "photo" && bird.photo;
+        const src = usePhoto ? bird.photo : bird.plateUrl || bird.photo;
+        const el = document.createElement("article");
+        el.className = "bird";
+        const label = bird.zh || bird.en;
+        const credit = usePhoto ? bird.credit : bird.plateUrl ? "fugleramme" : bird.credit || "";
+        const tag = !src ? "无图 no image" : usePhoto ? "photo" : bird.plateUrl ? "plate" : "photo fallback";
+        const wiki = bird.wiki && safeUrl(bird.wiki.url, "wikipedia.org");
+        const inat = bird.inat && safeUrl(bird.inat, "inaturalist.org");
+        el.innerHTML = `
+          <div class="shot ${usePhoto ? "photo" : src ? "plate" : ""}">
+            ${src ? `<img loading="lazy" src="${src}" alt="${label}" />` : `<span class="none">无图</span>`}
+            <span class="tag">${tag}</span>
+          </div>
+          <div class="names">
+            <div class="zh">${label}</div>
+            ${bird.pinyin ? `<div class="py">${bird.pinyin}</div>` : ""}
+            <div class="en">${bird.en}</div>
+            <div class="sci">${bird.sci}</div>
+          </div>
+          <div class="foot">
+            <span>×${bird.count} · ${ago(bird.last)} · ${Math.round(bird.confidence * 100)}%</span>
+            <span class="credit" title="${bird.credit || ""}">${credit}</span>
+          </div>
+          <div class="links">
+            ${wiki ? `<a href="${wiki}" target="_blank" rel="noopener">${bird.wiki.lang === "zh" ? "维基百科" : "Wikipedia"}</a>` : ""}
+            ${inat ? `<a href="${inat}" target="_blank" rel="noopener">iNaturalist</a>` : ""}
+          </div>`;
+        return el;
+      }
+
+      function render(frame) {
+        last = frame;
+        grid.replaceChildren(...(frame ? frame.birds.map(card) : []));
+        empty.hidden = !frame || frame.birds.length > 0;
+        if (frame) {
+          document.getElementById("species").textContent = frame.birds.length;
+          document.getElementById("calls").textContent =
+            frame.birds.reduce((n, b) => n + b.count, 0);
+          document.getElementById("window").textContent = `${frame.windowHours}h`;
+          document.getElementById("updated").textContent =
+            frame.stale ? "detector offline — showing last frame" : `updated ${clock(Date.parse(frame.generatedAt))}`;
+          banner.hidden = !frame.stale;
+          banner.textContent = frame.stale ? "BirdNET-Go is not answering; holding the last frame." : "";
+          if (!frame.birds.length) {
+            document.getElementById("empty-text").textContent = "静悄悄 — no birds heard";
+            document.getElementById("empty-sub").textContent = "THE PERCH IS BARE";
+          }
+        }
+      }
+
+      async function load() {
+        try {
+          const res = await fetch(`/api/frame?hours=${hours}`, { cache: "no-store" });
+          const body = await res.json();
+          if (!res.ok) throw new Error(body.error || res.status);
+          render(body);
+        } catch (err) {
+          document.getElementById("updated").textContent = `detector error: ${err.message}`;
+          if (!last) {
+            document.getElementById("empty-text").textContent = "听不到 — detector not answering";
+            document.getElementById("empty-sub").textContent = String(err.message).slice(0, 120);
+          }
+        }
+      }
+
+      load();
+      setInterval(load, 30000);
+      document.addEventListener("visibilitychange", () => !document.hidden && load());
+    </script>
+  </body>
+</html>

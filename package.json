@@ -1,0 +1,17 @@
+{
+  "name": "fugleramme-web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Bird frame for a self-hosted BirdNET-Go: 1800s plates or real photos, names in Chinese and English",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "pinyin-pro": "^3.29.4"
+  }
+}

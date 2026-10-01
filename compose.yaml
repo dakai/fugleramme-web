@@ -1,0 +1,14 @@
+services:
+  fugleramme-web:
+    build: .
+    # no published image yet - build this directory on the NAS (docker compose build)
+    ports:
+      - "8090:8090"
+    environment:
+      # Service name if BirdNET-Go runs in this same stack, otherwise the host:
+      BIRDNA_URL: http://host.docker.internal:8080
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
