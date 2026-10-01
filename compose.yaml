@@ -1,7 +1,6 @@
 services:
   fugleramme-web:
-    build: .
-    # no published image yet - build this directory on the NAS (docker compose build)
+    image: ghcr.io/dakai/fugleramme-web:latest
     ports:
       - "8090:8090"
     environment:

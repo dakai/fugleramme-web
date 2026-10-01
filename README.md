@@ -66,7 +66,7 @@ service name if both run in one compose stack, otherwise the host:
 ```yaml
 services:
   fugleramme-web:
-    build: .                                # no published image yet
+    image: ghcr.io/dakai/fugleramme-web:latest
     ports: ["8090:8090"]
     environment:
       BIRDNA_URL: http://host.docker.internal:8080   # Linux: needs extra_hosts below
@@ -75,8 +75,10 @@ services:
     restart: unless-stopped
 ```
 
-Build locally with `docker compose build`. `DATA_DIR=/data` in the image, so the cache
-survives image updates.
+`docker compose up -d` pulls the image; there is nothing to build on the NAS. The cache
+lives in `./data` (`DATA_DIR=/data` in the image), so plates, photos and names survive
+image updates. Pushing to `main` rebuilds and republishes via `.github/workflows/image.yml`
+(linux/amd64 + linux/arm64).
 
 ## How it behaves
 
