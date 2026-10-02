@@ -45,7 +45,9 @@ Frontend: one inline `<script type="module">` in `public/index.html`, no imports
 `load()` polls `/api/frame` every 30 s, rebuilds the grid with `grid.replaceChildren(...)`,
 and keeps `mode`/`hours` in `localStorage` keys `fugleramme.mode` / `fugleramme.hours`.
 Outbound links pass through `safeUrl()` — only `https:` URLs on `wikipedia.org` /
-`inaturalist.org` reach `href`. One shared `Audio` object backs every card's recorder.
+`inaturalist.org` reach `href`. One shared `Audio` object backs every card's recorder;
+`showPlay(btn, el)` is the single place that writes its label and its `--p` progress
+custom property, so the 30 s re-render calls it once for the card still playing.
 
 **Non-obvious invariants (do not "simplify" these away):**
 

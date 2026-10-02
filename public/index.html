@@ -145,6 +145,12 @@
         border: 1px solid var(--rule); border-radius: 999px; padding: 3px 10px;
         background: transparent; color: var(--ink-soft); cursor: pointer;
       }
+      /* Playback progress fills the play button from the left; --p is 0…1. The label
+         is --ink, not --ink-soft, because --ink-soft on the --rule fill is 3.2:1. */
+      .links .play {
+        position: relative; overflow: hidden; color: var(--ink);
+        background: linear-gradient(90deg, var(--rule) calc(var(--p, 0) * 100%), transparent 0);
+      }
       .links a:hover, .links a:focus-visible,
       .links button:hover, .links button:focus-visible { color: var(--ink); border-color: var(--ink); }
       .links button:disabled { opacity: 0.4; cursor: default; }
@@ -216,6 +222,7 @@
       let last = null;
       /* One <audio> for the whole page: a kiosk plays one call at a time. */
       let clip = null;
+
       hoursEl.value = String(hours);
       applyMode();
 
@@ -289,28 +296,42 @@
             ${inat ? `<a href="${inat}" target="_blank" rel="noopener">iNaturalist</a>` : ""}
             ${bird.id ? `<button class="drop" title="删除这条误报记录">✕ 误报 false positive</button>` : ""}
           </div>`;
-        el.querySelector(".play").onclick = (e) => togglePlay(bird, e.currentTarget);
+        const play = el.querySelector(".play");
+        play.onclick = (e) => togglePlay(bird, e.currentTarget);
+        // The 30 s poll replaces every card: hand the live clip's state to the new button.
+        if (clip && clip.dataset.id === String(bird.id) && !clip.ended) showPlay(play, clip);
         const drop = el.querySelector(".drop");
         if (drop) drop.onclick = () => dropDetection(bird, drop);
         return el;
       }
 
+      /* The play button doubles as the progress bar: --p is 0…1, filled from the left. */
+      function showPlay(btn, el) {
+        // A finished clip empties the bar; a paused one keeps it, so you see where you stopped.
+        btn.style.setProperty("--p", el.ended || !el.duration ? 0 : el.currentTime / el.duration);
+        btn.textContent = el.paused || el.ended ? "▶ 录音 Play" : "⏸ 暂停 Pause";
+      }
+
       function togglePlay(bird, btn) {
         if (clip && clip.dataset.id === String(bird.id)) {
           clip.paused ? clip.play() : clip.pause();
+          showPlay(btn, clip);
           return;
         }
         clip?.pause();
-        clip = new Audio(`/api/audio/${bird.id}`);
-        clip.dataset.id = String(bird.id);
-        clip.addEventListener("ended", () => { btn.textContent = "▶ 录音 Play"; });
-        clip.addEventListener("error", () => {
+        const el = new Audio(`/api/audio/${bird.id}`);
+        clip = el;
+        el.dataset.id = String(bird.id);
+        el.addEventListener("timeupdate", () => showPlay(btn, el));
+        el.addEventListener("loadedmetadata", () => showPlay(btn, el));
+        el.addEventListener("ended", () => showPlay(btn, el));
+        el.addEventListener("error", () => {
           btn.textContent = "无录音 no clip";
+          btn.style.setProperty("--p", 0);
           btn.disabled = true;
         });
-        clip.play().then(() => { btn.textContent = "⏸ 暂停 Pause"; }).catch(() => {
-          btn.textContent = "▶ 录音 Play";
-        });
+        showPlay(btn, el);
+        el.play().then(() => showPlay(btn, el)).catch(() => { btn.textContent = "▶ 录音 Play"; });
       }
 
       async function dropDetection(bird, btn) {

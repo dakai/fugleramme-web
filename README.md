@@ -108,6 +108,8 @@ does not contact the registry.
   species fugleramme has no plate for.
 - **Each card plays the call.** `▶ 录音 Play` streams the newest detection's clip through
   the frame (`GET /api/audio/:id`), so nothing third-party is fetched by the browser.
+  While it plays the button fills from the left like a progress bar, so a running call is
+  visible and not just audible; a paused one keeps its fill, an ended one empties it.
 - **`✕ 误报 false positive` deletes that detection from BirdNET-Go** (`DELETE
   /api/detection/:id`) after a confirmation — the record is gone from the station, not just
   hidden here. Needs the station running without HTTP auth; a protected station answers 401
@@ -123,3 +125,5 @@ detection a card's recorder addresses. Against the live station at `192.168.10.2
 plates, photos, both names, both toggle modes, whole-image photos, clip playback, the
 empty state, and the stale hold when the detector is unreachable. The false-positive
 delete was exercised end to end against a stand-in station, never against real data.
+The progress fill was checked in Chromium against a stand-in station: it tracks the clip,
+survives the 30 s re-render, holds on pause and empties on `ended`.
