@@ -15,6 +15,16 @@
         --card: #f7f1e4;
         color-scheme: light;
       }
+
+      /* The illustration captions are handwritten, like the plates' own captions.
+         Ma Shan Zheng (OFL, vendored) is the only CJK handwriting face guaranteed
+         to exist offline; it carries Latin glyphs too, so one file covers both. */
+      @font-face {
+        font-family: "Ma Shan Zheng";
+        src: url("/fonts/mashanzheng.woff2") format("woff2");
+        font-weight: 400;
+        font-display: swap;
+      }
       * { box-sizing: border-box; }
       html, body { height: 100%; }
       body {
@@ -155,6 +165,54 @@
       .links button:hover, .links button:focus-visible { color: var(--ink); border-color: var(--ink); }
       .links button:disabled { opacity: 0.4; cursor: default; }
       .links .drop:hover, .links .drop:focus-visible { color: #6d2b18; border-color: #c98b76; }
+
+      /* ---- illustration frames: the fugleramme collage, capped per frame ---- */
+      .collage {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: clamp(10px, 1.4vw, 24px) clamp(8px, 1.2vw, 20px);
+        align-items: end;
+      }
+      .collage .cell { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
+      .collage .shot {
+        display: flex; align-items: flex-end; justify-content: center;
+        width: 100%; height: clamp(110px, 24vh, 300px);
+      }
+      .collage .shot img { max-width: 100%; max-height: 100%; object-fit: contain; }
+      .collage .hand {
+        font-family: "Ma Shan Zheng", "Kaiti SC", "STKaiti", cursive;
+        line-height: 1.2; text-align: center; color: var(--ink);
+      }
+      .collage .hand.en { font-size: clamp(13px, 1.4vw, 20px); }
+      .collage .hand.zh { font-size: clamp(17px, 2vw, 30px); }
+      .collage .py { color: var(--ink-soft); font-size: clamp(9px, 0.9vw, 12px); letter-spacing: 0.06em; }
+      .collage .links { justify-content: center; }
+      .frames { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
+      .frames button, .frames span {
+        font: inherit; font-size: clamp(12px, 1.2vw, 15px);
+        padding: 7px 12px; border: 1px solid var(--rule); border-radius: 999px;
+        background: var(--card); color: var(--ink);
+      }
+      .frames button { cursor: pointer; }
+      .frames button:hover, .frames button:focus-visible { border-color: var(--ink); }
+      .frames button:disabled { opacity: 0.4; cursor: default; }
+      .frames span { border-color: transparent; background: transparent; color: var(--ink-soft); }
+
+      /* One frame per sheet: ⤓ A4 PDF prints exactly this frame, nothing else. */
+      @media print {
+        @page { size: A4 landscape; margin: 8mm; }
+        html, body { background: #fff; height: auto; }
+        header, .controls, footer, .empty, .banner { display: none !important; }
+        .sheet { max-width: none; padding: 0; min-height: 0; }
+        main { display: block; }
+        .collage { gap: 4mm 3mm; }
+        .collage .shot { height: 44mm; }
+        .collage .hand.en { font-size: 10pt; }
+        .collage .hand.zh { font-size: 13pt; }
+        .collage .py { font-size: 6.5pt; }
+        .collage .links { display: none; }
+        .collage .cell { break-inside: avoid; }
+      }
       .empty {
         text-align: center; color: var(--ink-soft);
         padding: min(18vh, 120px) 20px; font-size: clamp(16px, 2vw, 24px);
@@ -192,11 +250,18 @@
           <option value="72">近 3 日 · 72h</option>
           <option value="168">近 7 日 · 7d</option>
         </select>
+        <div class="frames" id="frames" hidden>
+          <button id="frame-prev" title="上一帧 previous frame">◀</button>
+          <span id="frame-label">第 1 / 1 帧</span>
+          <button id="frame-next" title="下一帧 next frame">▶</button>
+          <button id="frame-pdf" title="打印当前帧为 A4 PDF">⤓ A4 PDF</button>
+        </div>
       </div>
 
       <main>
         <p id="banner" class="banner" hidden></p>
         <div id="grid" class="grid"></div>
+        <div id="collage" class="collage"></div>
         <div id="empty" class="empty">
           <span id="empty-text">聆听中 — listening to the station</span>
           <small id="empty-sub">POLLING BIRDNET-GO</small>
@@ -215,6 +280,15 @@
       const empty = document.getElementById("empty");
       const banner = document.getElementById("banner");
       const hoursEl = document.getElementById("hours");
+      const collage = document.getElementById("collage");
+      const framesEl = document.getElementById("frames");
+      const frameLabel = document.getElementById("frame-label");
+      const framePrev = document.getElementById("frame-prev");
+      const frameNext = document.getElementById("frame-next");
+      const framePdf = document.getElementById("frame-pdf");
+      /* A frame is one printable sheet: a 4×3 collage of cut-outs, 12 to a page. */
+      const PER_FRAME = 12;
+      let frame = 0;
 
       // The frame is a picture frame: the chosen style sticks between visits.
       let mode = localStorage.getItem("fugleramme.mode") || "photo";
@@ -240,6 +314,13 @@
         localStorage.setItem("fugleramme.hours", String(hours));
         load();
       };
+
+      const step = (n) => { frame = n; render(last); };
+      framePrev.onclick = () => step(Math.max(0, frame - 1));
+      frameNext.onclick = () => step(frame + 1);
+      /* The print stylesheet hides everything but the current frame, so the
+         browser's own "save as PDF" writes one A4 file per frame. */
+      framePdf.onclick = () => window.print();
 
 
       const clock = (ms) =>
@@ -305,6 +386,30 @@
         return el;
       }
 
+      /* One collage cell: the cut-out, then the plate's own kind of caption —
+         English and 中文名 in handwriting. */
+      function cell(bird) {
+        const src = bird.plateUrl || bird.photo;
+        const el = document.createElement("article");
+        el.className = "cell";
+        el.title = bird.sci;
+        el.innerHTML = `
+          <div class="shot">${src ? `<img loading="lazy" src="${src}" alt="${bird.zh || bird.en}" />` : `<span class="none">无图</span>`}</div>
+          <div class="hand en">${bird.en}</div>
+          <div class="hand zh">${bird.zh || ""}</div>
+          ${bird.pinyin ? `<div class="py">${bird.pinyin}</div>` : ""}
+          <div class="links">
+            <button class="play" ${bird.id ? "" : "disabled"}>▶ 录音 Play</button>
+            ${bird.id ? `<button class="drop" title="删除这条误报记录">✕</button>` : ""}
+          </div>`;
+        const play = el.querySelector(".play");
+        play.onclick = (e) => togglePlay(bird, e.currentTarget);
+        if (clip && clip.dataset.id === String(bird.id) && !clip.ended) showPlay(play, clip);
+        const drop = el.querySelector(".drop");
+        if (drop) drop.onclick = () => dropDetection(bird, drop);
+        return el;
+      }
+
       /* The play button doubles as the progress bar: --p is 0…1, filled from the left. */
       function showPlay(btn, el) {
         // A finished clip empties the bar; a paused one keeps it, so you see where you stopped.
@@ -350,20 +455,31 @@
         }
       }
 
-      function render(frame) {
-        last = frame;
-        grid.replaceChildren(...(frame ? frame.birds.map(card) : []));
-        empty.hidden = !frame || frame.birds.length > 0;
-        if (frame) {
-          document.getElementById("species").textContent = frame.birds.length;
+      function render(data) {
+        last = data;
+        const birds = data ? data.birds : [];
+        const frames = Math.max(1, Math.ceil(birds.length / PER_FRAME));
+        frame = Math.min(Math.max(frame, 0), frames - 1);
+        const plate = mode === "plate";
+        grid.hidden = plate;
+        collage.hidden = !plate;
+        framesEl.hidden = !plate;
+        framePrev.disabled = frame === 0;
+        frameNext.disabled = frame >= frames - 1;
+        frameLabel.textContent = `第 ${frame + 1} / ${frames} 帧`;
+        grid.replaceChildren(...(plate || !data ? [] : birds.map(card)));
+        collage.replaceChildren(...(plate ? birds.slice(frame * PER_FRAME, (frame + 1) * PER_FRAME).map(cell) : []));
+        empty.hidden = !data || birds.length > 0;
+        if (data) {
+          document.getElementById("species").textContent = birds.length;
           document.getElementById("calls").textContent =
-            frame.birds.reduce((n, b) => n + b.count, 0);
-          document.getElementById("window").textContent = `${frame.windowHours}h`;
+            birds.reduce((n, b) => n + b.count, 0);
+          document.getElementById("window").textContent = `${data.windowHours}h`;
           document.getElementById("updated").textContent =
-            frame.stale ? "detector offline — showing last frame" : `updated ${clock(Date.parse(frame.generatedAt))}`;
-          banner.hidden = !frame.stale;
-          banner.textContent = frame.stale ? "BirdNET-Go is not answering; holding the last frame." : "";
-          if (!frame.birds.length) {
+            data.stale ? "detector offline — showing last frame" : `updated ${clock(Date.parse(data.generatedAt))}`;
+          banner.hidden = !data.stale;
+          banner.textContent = data.stale ? "BirdNET-Go is not answering; holding the last frame." : "";
+          if (!birds.length) {
             document.getElementById("empty-text").textContent = "静悄悄 — no birds heard";
             document.getElementById("empty-sub").textContent = "THE PERCH IS BARE";
           }

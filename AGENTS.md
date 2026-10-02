@@ -49,6 +49,18 @@ Outbound links pass through `safeUrl()` — only `https:` URLs on `wikipedia.org
 `showPlay(btn, el)` is the single place that writes its label and its `--p` progress
 custom property, so the 30 s re-render calls it once for the card still playing.
 
+`mode === "plate"` renders the **collage**, not the card grid: `PER_FRAME = 12` birds per
+frame in a 4-column grid, `frame` is the current page, `cell(bird)` draws one cut-out plus
+handwritten English/中文名 captions. `⤓ A4 PDF` calls `window.print()`; the `@media print`
+block is the whole export feature — `@page { size: A4 landscape }` and everything but
+`.collage` hidden, so the browser's "save as PDF" writes one A4 file per frame. Changing
+`PER_FRAME` past 12 will overflow the sheet onto a second page.
+
+`public/fonts/mashanzheng.woff2` is vendored, not installed: Ma Shan Zheng (OFL, its
+`OFL.txt` sits beside it), the only CJK handwriting face guaranteed offline, and it covers
+Latin too so both captions use one face. The browser fetches it only when the collage is
+actually rendered.
+
 **Non-obvious invariants (do not "simplify" these away):**
 
 - **A detector blip must never blank the glass.** On upstream failure the last good
@@ -77,7 +89,7 @@ custom property, so the 30 s re-render calls it once for the card still playing.
 | path | purpose |
 | --- | --- |
 | `server.mjs` | entire backend: config, disk cache, plate/taxon/detection logic, router |
-| `public/` | entire frontend; `index.html` is the only asset served |
+| `public/` | entire frontend: `index.html` plus the vendored `fonts/mashanzheng.woff2` |
 | `data/` | generated cache (`art/`, `photo/`, `json/`) — gitignored, `DATA_DIR` override |
 | `.github/workflows/` | one workflow: build + push the multi-arch image |
 

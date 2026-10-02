@@ -39,6 +39,7 @@ const MIME = {
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
   ".png": "image/png",
+  ".woff2": "font/woff2",
   ".svg": "image/svg+xml",
   ".ico": "image/x-icon",
 };
