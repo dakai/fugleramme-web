@@ -9,13 +9,13 @@ Point it at a station, open the page, put it on a screen.
 ```
 ┌──────────────────────────────┐
 │ 15 species · 51 calls in 24h │   ← everything the frame needs is one endpoint
-│ [插画 Illustration][照片 Photo] │   ← 照片 by default, 插画 on click
+│ [照片 Photo][插画 Illustration] │   ← 照片 by default, 插画 on click
 │ ┌────────┐ ┌────────┐ ┌─────┐ │
 │ │ plate  │ │ plate  │ │photo│ │   ← toggle switches every card at once
 │ │ 白鹭    │ │ 绿翅鸭  │ │棕背伯劳│ │
 │ │ Little │ │ Eurasian│ │Long- │ │   ← each card: 中文名 · English · 学名
-│ │ Egret  │ │ Teal   │ │tailed│ │      + 维基百科 / iNaturalist links
-│ └────────┘ └────────┘ └─────┘ │
+│ │ Egret  │ │ Teal   │ │tailed│ │
+│ └────────┘ └────────┘ └─────┘ │      + ▶录音 · ✕误报 · 维基百科 / iNaturalist
 ```
 
 ## Run it
@@ -85,12 +85,23 @@ image updates. Pushing to `main` rebuilds and republishes via `.github/workflows
 - `GET /api/frame?hours=24` — detections in the window, grouped per species, each enriched
   with plate, photo and 中文名. `hours` is clamped to 1…168.
 - The page polls every 30 s; the server rebuilds a frame at most every 20 s.
+- 照片 Photo is the default view (whole image, not cropped); 插画 Illustration shows the
+  fugleramme plate, falling back to the photo — tagged `photo fallback` — for the ~60 % of
+  species fugleramme has no plate for.
+- **Each card plays the call.** `▶ 录音 Play` streams the newest detection's clip through
+  the frame (`GET /api/audio/:id`), so nothing third-party is fetched by the browser.
+- **`✕ 误报 false positive` deletes that detection from BirdNET-Go** (`DELETE
+  /api/detection/:id`) after a confirmation — the record is gone from the station, not just
+  hidden here. Needs the station running without HTTP auth; a protected station answers 401
+  and the card says so in the banner.
 - **A detector blip never blanks the glass.** Upstream failures serve the last good frame
   with `"stale": true` (the page says so); with no frame ever built the endpoint is 503.
 - The chosen style and time window live in `localStorage`, so a kiosk keeps them.
 
 ## Verified
 
-`npm test` covers plate-file matching, species grouping and the time window. Against the
-live station at `192.168.10.207:8080`: plates, photos, both names, both toggle modes,
-empty state, and the stale hold when the detector is unreachable.
+`npm test` covers plate-file matching, species grouping, the time window and which
+detection a card's recorder addresses. Against the live station at `192.168.10.207:8080`:
+plates, photos, both names, both toggle modes, whole-image photos, clip playback, the
+empty state, and the stale hold when the detector is unreachable. The false-positive
+delete was exercised end to end against a stand-in station, never against real data.

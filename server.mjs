@@ -35,6 +35,7 @@ const MIME = {
   ".css": "text/css; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".webp": "image/webp",
+  ".wav": "audio/wav",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
   ".png": "image/png",
@@ -188,11 +189,16 @@ export function groupDetections(rows, sinceMs) {
       confidence: 0,
       first: at,
       last: at,
+      id: d.id ?? null,
     };
     bird.count += 1;
     bird.confidence = Math.max(bird.confidence, d.confidence || 0);
     bird.first = Math.min(bird.first, at);
-    bird.last = Math.max(bird.last, at);
+    // The card's recorder and its false-positive delete both act on the newest call.
+    if (at >= bird.last) {
+      bird.last = at;
+      bird.id = d.id ?? bird.id;
+    }
     birds.set(sci, bird);
   }
   return [...birds.values()].sort((a, b) => b.last - a.last || b.count - a.count);
@@ -222,6 +228,7 @@ async function enrich(birds) {
       }
       return {
         ...bird,
+        plateUrl: plate ? `/img/art/${plate.plate}` : null,
         zh: taxon.zh,
         pinyin: taxon.pinyin,
         credit: taxon.credit,
@@ -275,6 +282,42 @@ function notFound(res, msg = "not found") {
   res.end(msg);
 }
 
+/* ------------------------------------------------------ recorder / triage */
+
+/** BirdNET-Go guards every write with a CSRF cookie it hands out on any GET.
+ *  Echoing that cookie back in the `x-csrf-token` header clears the check. */
+async function birdnetWrite(method, pathname) {
+  const seed = await fetch(`${BIRDNA}/api/v2/ping`, { signal: AbortSignal.timeout(FETCH_MS) });
+  const cookie = (seed.headers.getSetCookie() || [])
+    .map((c) => c.split(";")[0])
+    .find((c) => c.startsWith("csrf="));
+  if (!cookie) throw new Error("detector issued no csrf cookie");
+  return fetch(`${BIRDNA}${pathname}`, {
+    method,
+    headers: { cookie, "x-csrf-token": cookie.slice(5) },
+    signal: AbortSignal.timeout(FETCH_MS),
+  });
+}
+
+/** Proxy one detection's wav. 503 means the clip is still being written; 404,
+ *  that it is gone (never produced, or purged by retention). Pass both through
+ *  so the page can tell "wait" from "never". */
+async function serveAudio(res, id) {
+  const up = await fetch(`${BIRDNA}/api/v2/audio/${id}`, { signal: AbortSignal.timeout(FETCH_MS) });
+  if (!up.ok) {
+    res.writeHead(up.status, { "content-type": MIME[".json"], "cache-control": "no-store" });
+    res.end(JSON.stringify({ status: up.status }));
+    return;
+  }
+  const body = Buffer.from(await up.arrayBuffer());
+  res.writeHead(200, {
+    "content-type": MIME[".wav"],
+    "content-length": body.length,
+    "cache-control": "private, max-age=3600",
+  });
+  res.end(body);
+}
+
 async function handle(req, res) {
   const url = new URL(req.url, "http://x");
   const p = decodeURIComponent(url.pathname);
@@ -294,6 +337,42 @@ async function handle(req, res) {
         res.writeHead(503, { "content-type": MIME[".json"] });
         res.end(JSON.stringify({ error: String(err), detector: BIRDNA }));
       }
+    }
+    return;
+  }
+
+  // The recorder for a card: /api/audio/<detectionId>
+  const clip = /^\/api\/audio\/(\d+)$/.exec(p);
+  if (clip) {
+    if (req.method !== "GET") {
+      notFound(res, "method not allowed");
+      return;
+    }
+    try {
+      await serveAudio(res, clip[1]);
+    } catch (err) {
+      res.writeHead(504, { "content-type": MIME[".json"] });
+      res.end(JSON.stringify({ error: String(err) }));
+    }
+    return;
+  }
+
+  // False-positive triage: DELETE /api/detection/<id> drops the record upstream.
+  const drop = /^\/api\/detection\/(\d+)$/.exec(p);
+  if (drop) {
+    if (req.method !== "DELETE") {
+      notFound(res, "method not allowed");
+      return;
+    }
+    try {
+      const up = await birdnetWrite("DELETE", `/api/v2/detections/${drop[1]}`);
+      // Whatever went upstream, the frame must not keep showing the deleted bird.
+      frameCache = { at: 0, body: null };
+      res.writeHead(up.ok ? 200 : up.status, { "content-type": MIME[".json"] });
+      res.end(JSON.stringify({ ok: up.ok, status: up.status }));
+    } catch (err) {
+      res.writeHead(502, { "content-type": MIME[".json"] });
+      res.end(JSON.stringify({ error: String(err) }));
     }
     return;
   }

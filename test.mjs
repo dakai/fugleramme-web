@@ -13,8 +13,8 @@ assert.equal(pickPlate(files, "Psilopogon cristatus"), null);
 
 const day = Date.parse("2026-10-01T13:38:30+08:00");
 const rows = [
-  { scientificName: "Zosterops simplex", commonName: "Swinhoe's White-eye", confidence: 0.9, timestamp: "2026-10-01T12:02:35+08:00" },
-  { scientificName: "Zosterops simplex", commonName: "Swinhoe's White-eye", confidence: 0.99, timestamp: "2026-10-01T12:48:06+08:00" },
+  { id: 101, scientificName: "Zosterops simplex", commonName: "Swinhoe's White-eye", confidence: 0.9, timestamp: "2026-10-01T12:02:35+08:00" },
+  { id: 138, scientificName: "Zosterops simplex", commonName: "Swinhoe's White-eye", confidence: 0.99, timestamp: "2026-10-01T12:48:06+08:00" },
   { scientificName: "Ixos mcclellandii", commonName: "Mountain Bulbul", confidence: 0.92, timestamp: "2026-10-01T13:38:30+08:00" },
   { scientificName: "Old bird", commonName: "Gone", timestamp: "2026-09-01T00:00:00+08:00" },
   { timestamp: "2026-10-01T13:00:00+08:00" }, // no species name
@@ -27,6 +27,9 @@ assert.equal(birds[1].count, 2);
 assert.equal(birds[1].confidence, 0.99);
 assert.equal(birds[1].en, "Swinhoe's White-eye");
 assert.equal(birds[1].last, Date.parse("2026-10-01T12:48:06+08:00"));
+// The card's recorder and its false-positive delete both act on the newest call.
+assert.equal(birds[1].id, 138);
+assert.equal(birds[0].id, null); // no id upstream -> no recorder, no delete
 
 // A bare date/time pair still parses (older BirdNET-Go builds omit `timestamp`).
 const legacy = groupDetections(

@@ -120,7 +120,9 @@
       }
       .shot.plate { background: none; }
       .shot img { width: 100%; height: 100%; object-fit: contain; display: block; }
-      .shot.photo img { object-fit: cover; }
+      /* A photo must show the whole bird, not a crop: let the image set its own height. */
+      .shot.photo { aspect-ratio: auto; }
+      .shot.photo img { object-fit: contain; height: auto; }
       .shot .none { color: var(--ink-soft); font-size: 13px; letter-spacing: 0.2em; }
       .shot .tag {
         position: absolute; left: 8px; bottom: 6px;
@@ -138,12 +140,15 @@
       .foot > span:first-child { white-space: nowrap; }
       .foot .credit { max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .links { display: flex; gap: 8px; flex-wrap: wrap; }
-      .links a {
-        font-size: 11px; letter-spacing: 0.08em; text-decoration: none;
+      .links a, .links button {
+        font-family: inherit; font-size: 11px; letter-spacing: 0.08em; text-decoration: none;
         border: 1px solid var(--rule); border-radius: 999px; padding: 3px 10px;
-        color: var(--ink-soft);
+        background: transparent; color: var(--ink-soft); cursor: pointer;
       }
-      .links a:hover, .links a:focus-visible { color: var(--ink); border-color: var(--ink); }
+      .links a:hover, .links a:focus-visible,
+      .links button:hover, .links button:focus-visible { color: var(--ink); border-color: var(--ink); }
+      .links button:disabled { opacity: 0.4; cursor: default; }
+      .links .drop:hover, .links .drop:focus-visible { color: #6d2b18; border-color: #c98b76; }
       .empty {
         text-align: center; color: var(--ink-soft);
         padding: min(18vh, 120px) 20px; font-size: clamp(16px, 2vw, 24px);
@@ -172,8 +177,8 @@
 
       <div class="controls">
         <div class="toggle" role="group" aria-label="Image style">
-          <button id="mode-plate" aria-pressed="false">插画 Illustration</button>
           <button id="mode-photo" aria-pressed="true">照片 Photo</button>
+          <button id="mode-plate" aria-pressed="false">插画 Illustration</button>
         </div>
         <select id="hours" aria-label="Time window">
           <option value="6">近 6 小时 · 6h</option>
@@ -209,6 +214,8 @@
       let mode = localStorage.getItem("fugleramme.mode") || "photo";
       let hours = Number(localStorage.getItem("fugleramme.hours")) || 24;
       let last = null;
+      /* One <audio> for the whole page: a kiosk plays one call at a time. */
+      let clip = null;
       hoursEl.value = String(hours);
       applyMode();
 
@@ -260,6 +267,7 @@
         const tag = !src ? "无图 no image" : usePhoto ? "photo" : bird.plateUrl ? "plate" : "photo fallback";
         const wiki = bird.wiki && safeUrl(bird.wiki.url, "wikipedia.org");
         const inat = bird.inat && safeUrl(bird.inat, "inaturalist.org");
+        const playing = clip && clip.dataset.id === String(bird.id) && !clip.paused;
         el.innerHTML = `
           <div class="shot ${usePhoto ? "photo" : src ? "plate" : ""}">
             ${src ? `<img loading="lazy" src="${src}" alt="${label}" />` : `<span class="none">无图</span>`}
@@ -276,10 +284,49 @@
             <span class="credit" title="${bird.credit || ""}">${credit}</span>
           </div>
           <div class="links">
+            <button class="play" ${bird.id ? "" : "disabled"}>${playing ? "⏸ 暂停 Pause" : "▶ 录音 Play"}</button>
             ${wiki ? `<a href="${wiki}" target="_blank" rel="noopener">${bird.wiki.lang === "zh" ? "维基百科" : "Wikipedia"}</a>` : ""}
             ${inat ? `<a href="${inat}" target="_blank" rel="noopener">iNaturalist</a>` : ""}
+            ${bird.id ? `<button class="drop" title="删除这条误报记录">✕ 误报 false positive</button>` : ""}
           </div>`;
+        el.querySelector(".play").onclick = (e) => togglePlay(bird, e.currentTarget);
+        const drop = el.querySelector(".drop");
+        if (drop) drop.onclick = () => dropDetection(bird, drop);
         return el;
+      }
+
+      function togglePlay(bird, btn) {
+        if (clip && clip.dataset.id === String(bird.id)) {
+          clip.paused ? clip.play() : clip.pause();
+          return;
+        }
+        clip?.pause();
+        clip = new Audio(`/api/audio/${bird.id}`);
+        clip.dataset.id = String(bird.id);
+        clip.addEventListener("ended", () => { btn.textContent = "▶ 录音 Play"; });
+        clip.addEventListener("error", () => {
+          btn.textContent = "无录音 no clip";
+          btn.disabled = true;
+        });
+        clip.play().then(() => { btn.textContent = "⏸ 暂停 Pause"; }).catch(() => {
+          btn.textContent = "▶ 录音 Play";
+        });
+      }
+
+      async function dropDetection(bird, btn) {
+        if (!confirm(`删除误报？Delete this ${bird.sci} detection from BirdNET-Go?`)) return;
+        btn.disabled = true;
+        try {
+          const res = await fetch(`/api/detection/${bird.id}`, { method: "DELETE" });
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(body.error || res.status);
+          clip?.pause();
+          load();
+        } catch (err) {
+          btn.disabled = false;
+          banner.hidden = false;
+          banner.textContent = `delete failed: ${err.message}`;
+        }
       }
 
       function render(frame) {
