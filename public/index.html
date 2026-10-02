@@ -166,27 +166,38 @@
       .links button:disabled { opacity: 0.4; cursor: default; }
       .links .drop:hover, .links .drop:focus-visible { color: #6d2b18; border-color: #c98b76; }
 
-      /* ---- illustration frames: the fugleramme collage, capped per frame ---- */
+      /* ---- illustration frames: fugleramme's collage, packed by real size ----
+         Not a grid: birds stand on a common baseline in a wrapped row, each drawn
+         at --h from its body mass (server `sizeWeight`), biggest first, so the
+         sheet reads like a plate instead of a card wall. */
       .collage {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: clamp(10px, 1.4vw, 24px) clamp(8px, 1.2vw, 20px);
-        align-items: end;
+        display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: center;
+        gap: clamp(14px, 2vw, 30px) clamp(10px, 1.6vw, 24px);
+        padding: clamp(10px, 2vw, 26px) 0;
+        /* The tone onPaper() paints each plate's paper into — PAPER in the script. */
+        background: #f7f1e4;
       }
-      .collage .cell { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
-      .collage .shot {
-        display: flex; align-items: flex-end; justify-content: center;
-        width: 100%; height: clamp(110px, 24vh, 300px);
+      .collage .cell {
+        display: flex; flex-direction: column; align-items: center;
+        gap: 2px; max-width: 60%;
       }
-      .collage .shot img { max-width: 100%; max-height: 100%; object-fit: contain; }
+      /* Each cell hugs its own bird — the plate is cut to the bird, so its height
+         IS the bird's — and the wrapped rows share one baseline. --h comes from
+         the server's weight, BASE_PX for an average bird. */
+      .collage .shot { display: flex; align-items: flex-end; justify-content: center; }
+      /* The cut-outs are opaque rectangles of their own paper. Multiply blends that
+         near-paper tone into this page's, so the plate edges vanish and the birds
+         sit on the sheet instead of in little frames — what fugleramme gets by
+         normalising every plate's halo to the page tone before pasting. */
+      .collage .shot img {
+        height: calc(var(--h, 160) * 1px); width: auto; max-width: 100%; mix-blend-mode: multiply;
+      }
       .collage .hand {
         font-family: "Ma Shan Zheng", "Kaiti SC", "STKaiti", cursive;
-        line-height: 1.2; text-align: center; color: var(--ink);
+        line-height: 1.25; text-align: center; color: var(--ink);
       }
-      .collage .hand.en { font-size: clamp(13px, 1.4vw, 20px); }
-      .collage .hand.zh { font-size: clamp(17px, 2vw, 30px); }
-      .collage .py { color: var(--ink-soft); font-size: clamp(9px, 0.9vw, 12px); letter-spacing: 0.06em; }
-      .collage .links { justify-content: center; }
+      .collage .hand.en { font-size: clamp(12px, 1.1vw, 17px); margin-top: 0.35em; }
+      .collage .hand.zh { font-size: clamp(15px, 1.6vw, 24px); }
       .frames { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
       .frames button, .frames span {
         font: inherit; font-size: clamp(12px, 1.2vw, 15px);
@@ -205,13 +216,16 @@
         header, .controls, footer, .empty, .banner { display: none !important; }
         .sheet { max-width: none; padding: 0; min-height: 0; }
         main { display: block; }
-        .collage { gap: 4mm 3mm; }
-        .collage .shot { height: 44mm; }
-        .collage .hand.en { font-size: 10pt; }
-        .collage .hand.zh { font-size: 13pt; }
-        .collage .py { font-size: 6.5pt; }
-        .collage .links { display: none; }
-        .collage .cell { break-inside: avoid; }
+        /* The sheet keeps its paper tone through print, or every plate's flattened
+           paper would print as a cream rectangle on white. */
+        .collage {
+          gap: 4mm 3mm; padding: 0; background: #f7f1e4;
+          print-color-adjust: exact; -webkit-print-color-adjust: exact;
+        }
+        .collage .shot img { height: calc(var(--h, 160) * 0.18mm); max-width: 62mm; mix-blend-mode: normal; }
+        .collage .hand.en { font-size: 9pt; }
+        .collage .hand.zh { font-size: 12pt; }
+        .collage .cell { max-width: 70mm; break-inside: avoid; }
       }
       .empty {
         text-align: center; color: var(--ink-soft);
@@ -271,7 +285,8 @@
       <footer>
         detections from a self-hosted BirdNET-Go ·
         plates: <a href="https://github.com/arnegiacomo/fugleramme" target="_blank" rel="noopener">fugleramme</a>
-        (CC BY-SA 4.0) · photos &amp; 中文名: iNaturalist
+        (CC BY-SA 4.0) · photos &amp; 中文名: iNaturalist · bird sizes: AVONET
+        (Tobias et al. 2022, CC BY 4.0)
       </footer>
     </div>
 
@@ -286,8 +301,10 @@
       const framePrev = document.getElementById("frame-prev");
       const frameNext = document.getElementById("frame-next");
       const framePdf = document.getElementById("frame-pdf");
-      /* A frame is one printable sheet: a 4×3 collage of cut-outs, 12 to a page. */
+      /* A frame is one printable sheet: a collage of cut-outs, 12 to a page. */
       const PER_FRAME = 12;
+      /** Pixel height of an average-sized bird; every plate scales from here. */
+      const BASE_PX = 190;
       let frame = 0;
 
       // The frame is a picture frame: the chosen style sticks between visits.
@@ -386,28 +403,74 @@
         return el;
       }
 
-      /* One collage cell: the cut-out, then the plate's own kind of caption —
-         English and 中文名 in handwriting. */
-      function cell(bird) {
-        const src = bird.plateUrl || bird.photo;
+      /* One collage cell: the cut-out alone on the page, captioned underneath.
+         No photo fallback and no buttons — a species fugleramme has no plate
+         for is left out of the illustration frame entirely, and the photo view
+         stays the place to play or delete a call. */
+      function cell(bird, height) {
         const el = document.createElement("article");
         el.className = "cell";
         el.title = bird.sci;
-        el.innerHTML = `
-          <div class="shot">${src ? `<img loading="lazy" src="${src}" alt="${bird.zh || bird.en}" />` : `<span class="none">无图</span>`}</div>
-          <div class="hand en">${bird.en}</div>
-          <div class="hand zh">${bird.zh || ""}</div>
-          ${bird.pinyin ? `<div class="py">${bird.pinyin}</div>` : ""}
-          <div class="links">
-            <button class="play" ${bird.id ? "" : "disabled"}>▶ 录音 Play</button>
-            ${bird.id ? `<button class="drop" title="删除这条误报记录">✕</button>` : ""}
-          </div>`;
-        const play = el.querySelector(".play");
-        play.onclick = (e) => togglePlay(bird, e.currentTarget);
-        if (clip && clip.dataset.id === String(bird.id) && !clip.ended) showPlay(play, clip);
-        const drop = el.querySelector(".drop");
-        if (drop) drop.onclick = () => dropDetection(bird, drop);
+        el.style.setProperty("--h", height.toFixed(0));
+        const url = bird.plateUrl;
+        const img = new Image();
+        img.loading = "lazy";
+        img.alt = bird.zh || bird.en;
+        img.src = url;
+        img.addEventListener("load", () => { img.src = onPaper(url, img); }, { once: true });
+        const el2 = document.createElement("div");
+        el2.className = "shot";
+        el2.append(img);
+        el.append(el2, caption(bird.en), caption(bird.zh || "", "zh"));
         return el;
+      }
+
+      const caption = (text, kind = "en") => {
+        const d = document.createElement("div");
+        d.className = `hand ${kind}`;
+        d.textContent = text;
+        return d;
+      };
+
+      /* fugleramme normalises every plate's paper to the page's own tone before
+         pasting it (paper.process_sprite), which is why its sheets read as paper
+         rather than as a wall of rectangles. Same idea, in a canvas: pale
+         low-saturation pixels become the page's paper and the edges disappear.
+         Once per plate — the 30 s poll reuses the result. */
+      const PAPER = [247, 241, 228];
+      const flattened = new Map();
+      function onPaper(url, img) {
+        const cached = flattened.get(url);
+        if (cached) return cached;
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        ctx.drawImage(img, 0, 0);
+        const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const { data } = image;
+        for (let i = 0; i < data.length; i += 4) {
+          const [r, g, b] = [data[i], data[i + 1], data[i + 2]];
+          if (Math.max(r, g, b) > 160 && Math.max(r, g, b) - Math.min(r, g, b) < 50) {
+            data[i] = PAPER[0];
+            data[i + 1] = PAPER[1];
+            data[i + 2] = PAPER[2];
+          }
+        }
+        ctx.putImageData(image, 0, 0);
+        const flat = canvas.toDataURL("image/webp", 0.92);
+        flattened.set(url, flat);
+        return flat;
+      }
+
+      /* The collage is drawn the way fugleramme draws it: biggest birds first,
+         every bird scaled by `size` (body mass ** 0.14 x the plate's own slack)
+         against the frame's mean, so an eagle towers over a goldcrest. */
+      function collageFrame(birds) {
+        const mean = birds.reduce((n, b) => n + b.size, 0) / birds.length || 1;
+        return [...birds]
+          .sort((a, b) => b.size - a.size)
+          .map((b) => cell(b, (BASE_PX * b.size) / mean));
       }
 
       /* The play button doubles as the progress bar: --p is 0…1, filled from the left. */
@@ -458,9 +521,11 @@
       function render(data) {
         last = data;
         const birds = data ? data.birds : [];
-        const frames = Math.max(1, Math.ceil(birds.length / PER_FRAME));
-        frame = Math.min(Math.max(frame, 0), frames - 1);
         const plate = mode === "plate";
+        // The illustration frame shows only what fugleramme actually drew.
+        const drawn = plate ? birds.filter((b) => b.plateUrl) : birds;
+        const frames = Math.max(1, Math.ceil(drawn.length / PER_FRAME));
+        frame = Math.min(Math.max(frame, 0), frames - 1);
         grid.hidden = plate;
         collage.hidden = !plate;
         framesEl.hidden = !plate;
@@ -468,8 +533,10 @@
         frameNext.disabled = frame >= frames - 1;
         frameLabel.textContent = `第 ${frame + 1} / ${frames} 帧`;
         grid.replaceChildren(...(plate || !data ? [] : birds.map(card)));
-        collage.replaceChildren(...(plate ? birds.slice(frame * PER_FRAME, (frame + 1) * PER_FRAME).map(cell) : []));
-        empty.hidden = !data || birds.length > 0;
+        collage.replaceChildren(
+          ...collageFrame(drawn.slice(frame * PER_FRAME, (frame + 1) * PER_FRAME)),
+        );
+        empty.hidden = !data || drawn.length > 0;
         if (data) {
           document.getElementById("species").textContent = birds.length;
           document.getElementById("calls").textContent =

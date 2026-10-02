@@ -1,6 +1,6 @@
 // Run: node test.mjs
 import assert from "node:assert/strict";
-import { englishWiki, groupDetections, kebab, pickPlate, toPinyin, zhArticle } from "./server.mjs";
+import { englishWiki, groupDetections, kebab, pickPlate, sizeWeight, toPinyin, zhArticle } from "./server.mjs";
 
 assert.equal(kebab("Zosterops simplex"), "zosterops-simplex");
 assert.equal(kebab("  Hylopezus  "), "hylopezus");
@@ -10,6 +10,20 @@ assert.equal(pickPlate(files, "Anas crecca"), "anas-crecca.webp");
 assert.equal(pickPlate(files, "Anas platyrhynchos"), "anas-platyrhynchos.webp");
 assert.equal(pickPlate(["anas-crecca-2.webp"], "Anas crecca"), "anas-crecca-2.webp");
 assert.equal(pickPlate(files, "Psilopogon cristatus"), null);
+
+// Bird size: fugleramme's rule. A known mass gives mass**0.14 against the table
+// median; a plate cut tight to its bird multiplies by 1. A loose crop (the bird
+// fills half the plate's long side) doubles it so the bird itself still lands at
+// the mass-derived size. Nothing known anywhere leaves it at 1.
+const tight = { box: [0, 0, 1, 1], cut: [1200, 900] };
+const loose = { box: [0, 0, 0.5, 0.5], cut: [1200, 1200] };
+assert.equal(sizeWeight("Corvus corax", undefined).toFixed(2), sizeWeight("Corvus corax", tight).toFixed(2));
+assert.equal(sizeWeight("Corvus corax", loose).toFixed(4), (2 * sizeWeight("Corvus corax", tight)).toFixed(4));
+// An eagle draws bigger than a white-eye; a species fugleramme has no plate for
+// is unknown to the mass table and draws at 1.
+assert.ok(sizeWeight("Zosterops simplex", tight) < 1);
+assert.ok(sizeWeight("Gyps fulvus", tight) > 1);
+assert.equal(sizeWeight("Zzyzx nonexistentia", tight), 1);
 
 const day = Date.parse("2026-10-01T13:38:30+08:00");
 const rows = [

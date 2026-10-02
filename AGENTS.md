@@ -50,16 +50,25 @@ Outbound links pass through `safeUrl()` — only `https:` URLs on `wikipedia.org
 custom property, so the 30 s re-render calls it once for the card still playing.
 
 `mode === "plate"` renders the **collage**, not the card grid: `PER_FRAME = 12` birds per
-frame in a 4-column grid, `frame` is the current page, `cell(bird)` draws one cut-out plus
-handwritten English/中文名 captions. `⤓ A4 PDF` calls `window.print()`; the `@media print`
+frame, no buttons, no links, no pinyin, and species with no plate left out entirely.
+`frame` is the current page, `cell(bird, height)` draws one cut-out plus handwritten
+English/中文名, `collageFrame()` sorts by `size` and scales each bird against the frame's
+mean (`BASE_PX` = an average bird). `⤓ A4 PDF` calls `window.print()`; the `@media print`
 block is the whole export feature — `@page { size: A4 landscape }` and everything but
-`.collage` hidden, so the browser's "save as PDF" writes one A4 file per frame. Changing
-`PER_FRAME` past 12 will overflow the sheet onto a second page.
+`.collage` hidden, so the browser's "save as PDF" writes one A4 file per frame. The print
+scale (`0.18mm` per `--h` unit) is what keeps 12 birds on that one page.
 
-`public/fonts/mashanzheng.woff2` is vendored, not installed: Ma Shan Zheng (OFL, its
-`OFL.txt` sits beside it), the only CJK handwriting face guaranteed offline, and it covers
-Latin too so both captions use one face. The browser fetches it only when the collage is
-actually rendered.
+**Bird size is fugleramme's rule, ported.** `sizeWeight(sci, entry)` = AVONET body mass
+(`assets/bird-masses.json`, vendored, CC BY 4.0 — Tobias et al. 2022) ** 0.14 against the
+table median, times the plate's `span_ratio` from the cached `geometry.json`. Both halves
+return 1 when unknown. `enrich()` publishes it as `bird.size`. Do not replace it with plate
+pixel area: the mass term is what makes a bittern read bigger than a wagtail.
+
+`onPaper(url, img)` repaints each plate's paper to the sheet tone in a canvas (fugleramme
+does the same in `paper.process_sprite`) and caches the data URL per plate. Without it the
+cut-outs read as a wall of pale rectangles, which is the whole reason the collage looked
+ugly. `PAPER` in the script and `.collage`'s background must stay the same colour; print
+needs `print-color-adjust: exact` or the sheet prints white under cream plates.
 
 **Non-obvious invariants (do not "simplify" these away):**
 
@@ -92,6 +101,7 @@ actually rendered.
 | `public/` | entire frontend: `index.html` plus the vendored `fonts/mashanzheng.woff2` |
 | `data/` | generated cache (`art/`, `photo/`, `json/`) — gitignored, `DATA_DIR` override |
 | `.github/workflows/` | one workflow: build + push the multi-arch image |
+| `assets/` | vendored `bird-masses.json` (AVONET grams) — read once at startup |
 
 ## Development Commands
 
@@ -139,7 +149,7 @@ Observed style — match it, there is no formatter config to arbitrate:
 | `public/index.html` | whole frontend (inline CSS tokens + module script) |
 | `test.mjs` | the entire test suite (61 lines) |
 | `package.json` | scripts, `engines.node >= 20`, the single dep |
-| `Dockerfile` | `node:22-alpine`, `npm ci --omit=dev`, `EXPOSE 8090`, `/data` volume, wget healthcheck; copies **only** `server.mjs` + `public/` |
+| `Dockerfile` | `node:22-alpine`, `npm ci --omit=dev`, `EXPOSE 8090`, `/data` volume, wget healthcheck; copies **only** `server.mjs` + `assets/` + `public/` |
 | `compose.yaml` | TrueNAS deploy: `ghcr.io/dakai/fugleramme-web:latest`, `8090:8090`, `./data:/data` |
 | `.github/workflows/image.yml` | on push to `main`: buildx linux/amd64 + linux/arm64 → ghcr. **No test step.** |
 

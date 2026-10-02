@@ -3,6 +3,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY server.mjs ./
+COPY assets ./assets
 COPY public ./public
 ENV DATA_DIR=/data PORT=8090
 VOLUME /data

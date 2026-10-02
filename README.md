@@ -103,15 +103,22 @@ does not contact the registry.
 - `GET /api/frame?hours=24` — detections in the window, grouped per species, each enriched
   with plate, photo and 中文名. `hours` is clamped to 1…168.
 - The page polls every 30 s; the server rebuilds a frame at most every 20 s.
-- 照片 Photo is the default view (whole image, not cropped); 插画 Illustration is the
-  **fugleramme collage**: up to **12 plates on one frame**, newest heard first, each
-  captioned under the bird with its English and 中文名 in handwriting. More species than
-  that and the collage rolls into another frame (`◀ 第 1 / 2 帧 ▶`); the count follows the
-  time window. A species fugleramme has no plate for falls back to its photo.
+- 照片 Photo is the default view (whole image, not cropped), and it is where the call is
+  played, the false positive dropped and the names read. 插画 Illustration is the
+  **fugleramme collage**: up to **12 plates on one frame**, nothing else — no buttons, no
+  links, no pinyin, and **no photo fallback**: a species fugleramme never drew is left out
+  of the sheet rather than shown as a photo. More species than that and the collage rolls
+  into another frame (`◀ 第 1 / 2 帧 ▶`).
+- **The collage is drawn the way fugleramme draws it.** Birds are sized by **real body
+  mass** — AVONET grams (`assets/bird-masses.json`, Tobias et al. 2022, CC BY 4.0) raised to
+  `0.14` so the heaviest reads ~2.5× the lightest — multiplied by the plate's own slack from
+  `geometry.json`, so a loosely-cut scan still draws its bird at the right size. Biggest
+  first, each plate standing on a shared baseline, captioned underneath in handwriting.
+  Every plate's paper is repainted to the sheet's tone in a canvas (`onPaper`), which is
+  what makes the result read as a sheet instead of a wall of rectangles.
 - **⤓ A4 PDF prints one frame per sheet.** The print stylesheet is A4 landscape and hides
   everything but the current frame, so the browser's own *Save as PDF* writes a single
-  A4 file for the frame on screen — no PDF library, nothing to install. Captions print;
-  the recorder buttons do not.
+  A4 file for the frame on screen — no PDF library, nothing to install.
   The handwriting is [Ma Shan Zheng](https://fonts.google.com/specimen/Ma+Shan+Zheng)
   (OFL, vendored at `public/fonts/`), the only CJK handwriting face guaranteed to exist
   offline; it carries Latin glyphs too, so one 3 MB file covers both names.
@@ -136,6 +143,7 @@ empty state, and the stale hold when the detector is unreachable. The false-posi
 delete was exercised end to end against a stand-in station, never against real data.
 The progress fill was checked in Chromium against a stand-in station: it tracks the clip,
 survives the 30 s re-render, holds on pause and empties on `ended`.
-The collage was checked in Chromium against a stand-in station: 20 species paginate into
-2 frames of 12 + 8, the captions render in the vendored handwriting face, and each frame
-exports as a single A4 landscape page (`pdfinfo`: 1 page, 841.92 × 595.92 pt).
+The collage was checked in Chromium against the live station: birds sized by mass (a
+bittern drawn taller than a wagtail), plates flattened into the sheet, species with no
+plate left out, 12 to a frame, and each frame one A4 landscape page
+(`pdfinfo`: 1 page, 841.92 × 595.92 pt).

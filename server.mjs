@@ -107,6 +107,32 @@ async function plateFor(sci, manifest, aliases) {
   return ok ? { plate: file, plateSource: manifest.meta[`birds/${file}`]?.url || null } : null;
 }
 
+/* -------------------------------------------------------------- bird size */
+
+/** AVONET body mass in grams (Tobias et al. 2022, CC BY 4.0), trimmed to the
+ *  taxa fugleramme draws. Vendored rather than fetched: it is 15 kB and the
+ *  frame must still size birds with the internet unplugged. */
+const MASSES = await readFile(path.join(ROOT, "assets", "bird-masses.json"), "utf8")
+  .then(JSON.parse)
+  .catch(() => ({}));
+const MASS_MEDIAN =
+  Object.values(MASSES).sort((a, b) => a - b)[Object.keys(MASSES).length >> 1] || 1;
+/** Display size is mass ** 0.14: <1 compresses, so the heaviest bird reads bigger
+ *  without the smallest vanishing. Heaviest lands near 2.5x the lightest. */
+export const SIZE_EXPONENT = 0.14;
+
+/** How big to draw a species, fugleramme's own rule: real body mass, times the
+ *  plate's own slack so a loosely-cut scan still draws its bird at that size.
+ *  1.0 whenever either half is unknown. `entry` is geometry.json's record. */
+export function sizeWeight(sci, entry) {
+  const mass = MASSES[kebab(sci)];
+  const size = mass && Number.isFinite(mass) ? (mass / MASS_MEDIAN) ** SIZE_EXPONENT : 1;
+  const [x0, y0, x1, y1] = entry?.box || [];
+  const [width, height] = entry?.cut || [];
+  const span = width > 0 && height > 0 ? Math.max((x1 - x0) * width, (y1 - y0) * height) : 0;
+  return size * (span > 0 ? Math.max(width, height) / span : 1);
+}
+
 /* ----------------------------------------------------------------- taxon */
 
 const CC = /^cc0|^cc-by|^cc-by-sa/i;
@@ -215,6 +241,9 @@ async function enrich(birds) {
   const aliases = await cached(path.join(DIRS.json, "aliases.json"), () =>
     getJSON(`${FUGLERAMME_RAW}/birdnet_aliases.json`).catch(() => ({})),
   );
+  const geometry = await cached(path.join(DIRS.json, "geometry.json"), () =>
+    getJSON(`${FUGLERAMME_RAW}/artwork/classic/geometry.json`).catch(() => ({})),
+  );
 
   return Promise.all(
     birds.map(async (bird) => {
@@ -230,6 +259,8 @@ async function enrich(birds) {
       return {
         ...bird,
         plateUrl: plate ? `/img/art/${plate.plate}` : null,
+        // How big to draw it in the collage: real body mass, plate slack folded in.
+        size: plate ? sizeWeight(aliases[bird.sci] || bird.sci, geometry[`birds/${plate.plate}`]) : 1,
         zh: taxon.zh,
         pinyin: taxon.pinyin,
         credit: taxon.credit,
