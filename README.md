@@ -80,6 +80,24 @@ lives in `./data` (`DATA_DIR=/data` in the image), so plates, photos and names s
 image updates. Pushing to `main` rebuilds and republishes via `.github/workflows/image.yml`
 (linux/amd64 + linux/arm64).
 
+### Updating the app
+
+Every push to `main` publishes **two** tags: `:latest` and `:<full-commit-sha>`
+(e.g. `ghcr.io/dakai/fugleramme-web:7066ce7…`). Pin the SHA one in your YAML and a
+normal redeploy always lands the new image, because a changed image reference is a
+changed compose file. `:latest` is a pointer, not a version — with it, a redeploy of
+unchanged YAML just recreates the container from whatever is already on disk, because
+the tag string did not change.
+
+If you keep `:latest`, pull it explicitly before redeploying:
+
+```bash
+midclt call app.pull_images fugleramme-web   # TrueNAS: re-pull a custom app's floating tag
+```
+
+There is no reliable re-pull for a custom YAML app in the web UI; `app.redeploy` alone
+does not contact the registry.
+
 ## How it behaves
 
 - `GET /api/frame?hours=24` — detections in the window, grouped per species, each enriched

@@ -1,5 +1,8 @@
 services:
   fugleramme-web:
+    # :latest is fine on first install. To get new images on redeploy, pin the commit
+    # tag instead (ghcr.io/dakai/fugleramme-web:<full-commit-sha>) — a changed image
+    # reference is what makes compose fetch again.
     image: ghcr.io/dakai/fugleramme-web:latest
     ports:
       - "8090:8090"
