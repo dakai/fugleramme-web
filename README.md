@@ -114,11 +114,14 @@ does not contact the registry.
   `0.14` so the heaviest reads ~2.5× the lightest — multiplied by the plate's own slack from
   `geometry.json`, so a loosely-cut scan still draws its bird at the right size. Biggest
   first, each plate standing on a shared baseline, captioned underneath in handwriting.
-  Every plate's paper is repainted to the sheet's tone in a canvas (`onPaper`), which is
-  what makes the result read as a sheet instead of a wall of rectangles.
-- **⤓ A4 PDF prints one frame per sheet.** The print stylesheet is A4 landscape and hides
-  everything but the current frame, so the browser's own *Save as PDF* writes a single
-  A4 file for the frame on screen — no PDF library, nothing to install.
+  Every plate's paper is repainted to the sheet's tone in a canvas (`onPaper`) — fugleramme's
+  own `TARGET_PAPER`, aged cream rather than white, because the plates' paper is not white.
+- **What you see is the sheet that prints.** The illustration frame is laid out as an A4
+  landscape page: every bird and caption is sized in percent of the *sheet's* height, so the
+  screen composition and the PDF are the same page. Plates are drawn whole, never cropped.
+- **⤓ A4 PDF prints one frame per sheet.** The print stylesheet is A4 landscape with zero
+  margin and hides everything but the current frame, so the browser's own *Save as PDF*
+  writes a single A4 file for the frame on screen — no PDF library, nothing to install.
   The handwriting is [Ma Shan Zheng](https://fonts.google.com/specimen/Ma+Shan+Zheng)
   (OFL, vendored at `public/fonts/`), the only CJK handwriting face guaranteed to exist
   offline; it carries Latin glyphs too, so one 3 MB file covers both names.

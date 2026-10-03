@@ -51,12 +51,22 @@ custom property, so the 30 s re-render calls it once for the card still playing.
 
 `mode === "plate"` renders the **collage**, not the card grid: `PER_FRAME = 12` birds per
 frame, no buttons, no links, no pinyin, and species with no plate left out entirely.
-`frame` is the current page, `cell(bird, height)` draws one cut-out plus handwritten
+`frame` is the current page, `cell(bird, weight)` draws one cut-out plus handwritten
 English/中文名, `collageFrame()` sorts by `size` and scales each bird against the frame's
-mean (`BASE_PX` = an average bird). `⤓ A4 PDF` calls `window.print()`; the `@media print`
-block is the whole export feature — `@page { size: A4 landscape }` and everything but
-`.collage` hidden, so the browser's "save as PDF" writes one A4 file per frame. The print
-scale (`0.18mm` per `--h` unit) is what keeps 12 birds on that one page.
+**biggest** bird, so `--h` 1 is always the tallest plate on the sheet.
+
+**The screen sheet is the paper sheet.** `.collage` is an A4 landscape box — `container-type:
+size`, `aspect-ratio: 297/210`, `--sheet` background — and every size inside it is in `cqh`
+(1% of the sheet's height), including the captions. The print block only changes the box to
+`297mm × 210mm` and drops everything but `.collage`, so `window.print()` writes exactly the
+page on screen: one A4 landscape file per frame. `@page { margin: 0 }` is required — any
+margin shrinks the sheet below its box and the content spills to a second page. The plate
+unit is `26cqh`; four rows of that plus captions is what bounds 12 birds to one page.
+Cells are `width: max-content` on purpose: with a width cap the browser shrinks the plate
+to fit and the picture distorts or crops.
+
+`⤓ A4 PDF` calls `window.print()`. That and the `@media print` block are the whole export
+feature — no PDF library, nothing to install.
 
 **Bird size is fugleramme's rule, ported.** `sizeWeight(sci, entry)` = AVONET body mass
 (`assets/bird-masses.json`, vendored, CC BY 4.0 — Tobias et al. 2022) ** 0.14 against the
@@ -67,8 +77,10 @@ pixel area: the mass term is what makes a bittern read bigger than a wagtail.
 `onPaper(url, img)` repaints each plate's paper to the sheet tone in a canvas (fugleramme
 does the same in `paper.process_sprite`) and caches the data URL per plate. Without it the
 cut-outs read as a wall of pale rectangles, which is the whole reason the collage looked
-ugly. `PAPER` in the script and `.collage`'s background must stay the same colour; print
-needs `print-color-adjust: exact` or the sheet prints white under cream plates.
+ugly. Print needs `print-color-adjust: exact` or the sheet prints white under cream plates.
+`PAPER` in the script is fugleramme's `TARGET_PAPER` (242, 237, 226) — aged cream, never
+pure white, because the plates' own paper is not white either. It must stay equal to
+`.collage`'s `--sheet` or the rectangles come back.
 
 **Non-obvious invariants (do not "simplify" these away):**
 
