@@ -142,6 +142,11 @@ cell removed instead — a frame keeps no holes, and the fit does not wait on it
 - **A detector blip must never blank the glass.** On upstream failure the last good
   frame is re-served with `"stale": true` (server.mjs:288-296); 503 only when no frame
   was ever built. The page renders a banner.
+- **`[hidden]` needs the `!important` rule.** `.collage`, `.grid`, `.frames`, `.banner` all
+  set an author `display`, which beats the UA's `[hidden] { display: none }` — so
+  `el.hidden = true` silently did nothing and the photo view kept showing the paper sheet
+  and the `第 1 / 2 帧` / `⤓ A4 PDF` controls. `[hidden] { display: none !important }` at
+  index.html:32 is what makes mode switching work; never drop it.
 - **Plate files are kebab-cased scientific names with an optional `-<n>` variant**;
   the un-suffixed plate wins (`pickPlate`, server.mjs:95). Artwork is filed under the
   *current* genus, so a station upgraded across a reclassification is matched through

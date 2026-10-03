@@ -26,6 +26,10 @@
         font-display: swap;
       }
       * { box-sizing: border-box; }
+      /* Author `display` beats the UA's `[hidden] { display: none }`, so every
+         hidden flex/grid box on this page (the sheet, the frame controls, the
+         banner, the sorter) stayed on screen in the other mode. */
+      [hidden] { display: none !important; }
       html, body { height: 100%; }
       body {
         margin: 0;
@@ -280,6 +284,12 @@
           <option value="72">近 3 日 · 72h</option>
           <option value="168">近 7 日 · 7d</option>
         </select>
+        <select id="sort" aria-label="Sort species">
+          <option value="last">最近 · latest heard</option>
+          <option value="count">最多 · most calls</option>
+          <option value="rare">最少 · rarest</option>
+          <option value="first">首次 · first heard</option>
+        </select>
         <div class="frames" id="frames" hidden>
           <button id="frame-prev" title="上一帧 previous frame">◀</button>
           <span id="frame-label">第 1 / 1 帧</span>
@@ -317,6 +327,15 @@
       const framePrev = document.getElementById("frame-prev");
       const frameNext = document.getElementById("frame-next");
       const framePdf = document.getElementById("frame-pdf");
+      const sortEl = document.getElementById("sort");
+      /* Which birds lead the grid: freshest, most often heard, or the ones you
+         almost never see. Ties fall back to the freshest so the order is stable. */
+      const SORTS = {
+        last: (a, b) => b.last - a.last,
+        count: (a, b) => b.count - a.count || b.last - a.last,
+        rare: (a, b) => a.count - b.count || b.last - a.last,
+        first: (a, b) => a.first - b.first,
+      };
       /* A frame is one A4 sheet: a collage of cut-outs, 12 to a page. */
       const PER_FRAME = 12;
       let frame = 0;
@@ -345,6 +364,9 @@
         localStorage.setItem("fugleramme.hours", String(hours));
         load();
       };
+      // The grid is the one list a visitor re-orders; the illustration frame
+      // keeps its own size order, so the sorter follows the mode.
+      sortEl.onchange = () => render(last);
 
       const step = (n) => { frame = n; render(last); };
       framePrev.onclick = () => step(Math.max(0, frame - 1));
@@ -684,10 +706,11 @@
         grid.hidden = plate;
         collage.hidden = !plate;
         framesEl.hidden = !plate;
+        sortEl.hidden = plate;
         framePrev.disabled = frame === 0;
         frameNext.disabled = frame >= frames - 1;
         frameLabel.textContent = `第 ${frame + 1} / ${frames} 帧`;
-        grid.replaceChildren(...(plate || !data ? [] : birds.map(card)));
+        grid.replaceChildren(...(plate || !data ? [] : [...birds].sort(SORTS[sortEl.value]).map(card)));
         // Only in plate mode: the sheet is hidden in photo mode, and building it
         // anyway minted cells (and a /null image request each) for every bird with
         // no plate, on every 30 s poll.

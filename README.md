@@ -109,6 +109,9 @@ does not contact the registry.
   links, no pinyin, and **no photo fallback**: a species fugleramme never drew is left out
   of the sheet rather than shown as a photo. More species than that and the collage rolls
   into another frame (`◀ 第 1 / 2 帧 ▶`).
+- In the photo grid a sorter sits beside the time window: 最近 latest heard (default),
+  最多 most calls, 最少 rarest, 首次 first heard — ties fall back to the freshest. It orders
+  the grid only; the collage keeps its own size order, so the sorter hides with it.
 - **The collage is drawn the way fugleramme draws it.** Birds are sized by **real body
   mass** — AVONET grams (`assets/bird-masses.json`, Tobias et al. 2022, CC BY 4.0) raised to
   `0.14` so the heaviest reads ~2.5× the lightest — and the plate that carries a bird is
