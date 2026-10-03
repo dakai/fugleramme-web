@@ -137,6 +137,10 @@ plate's paper onto a white bird's head and repaints it.
 - **`groupDetections` keeps the newest detection's `id`** on the group, because the
   recorder and the delete both address one record, not a species. A row without an `id`
   leaves `bird.id === null`, and the card then renders neither button enabled.
+- **The collage is only built in plate mode**, and the empty state is decided by the view
+  on screen (`plate ? drawn.length : birds.length`). Both were computed from the plate list
+  regardless of mode, so photo mode — the default — minted a hidden sheet for every bird,
+  each `img` without a plate asking for `/null`, on every 30 s poll.
 
 ## Key Directories
 

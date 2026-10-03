@@ -629,10 +629,15 @@
         frameNext.disabled = frame >= frames - 1;
         frameLabel.textContent = `第 ${frame + 1} / ${frames} 帧`;
         grid.replaceChildren(...(plate || !data ? [] : birds.map(card)));
+        // Only in plate mode: the sheet is hidden in photo mode, and building it
+        // anyway minted cells (and a /null image request each) for every bird with
+        // no plate, on every 30 s poll.
         collage.replaceChildren(
-          ...collageFrame(drawn.slice(frame * PER_FRAME, (frame + 1) * PER_FRAME)),
+          ...(plate ? collageFrame(drawn.slice(frame * PER_FRAME, (frame + 1) * PER_FRAME)) : []),
         );
-        empty.hidden = !data || drawn.length > 0;
+        // The empty state belongs to the view on screen: photo mode is never
+        // empty just because no species has a plate.
+        empty.hidden = !data || (plate ? drawn.length : birds.length) > 0;
         if (data) {
           document.getElementById("species").textContent = birds.length;
           document.getElementById("calls").textContent =
