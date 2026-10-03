@@ -74,13 +74,46 @@ table median, times the plate's `span_ratio` from the cached `geometry.json`. Bo
 return 1 when unknown. `enrich()` publishes it as `bird.size`. Do not replace it with plate
 pixel area: the mass term is what makes a bittern read bigger than a wagtail.
 
-`onPaper(url, img)` repaints each plate's paper to the sheet tone in a canvas (fugleramme
-does the same in `paper.process_sprite`) and caches the data URL per plate. Without it the
-cut-outs read as a wall of pale rectangles, which is the whole reason the collage looked
-ugly. Print needs `print-color-adjust: exact` or the sheet prints white under cream plates.
-`PAPER` in the script is fugleramme's `TARGET_PAPER` (242, 237, 226) — aged cream, never
-pure white, because the plates' own paper is not white either. It must stay equal to
-`.collage`'s `--sheet` or the rectangles come back.
+**`onPaper(url, img)` is fugleramme's `paper.process_sprite`, ported to a canvas.** Every
+plate carries a ring of its own scan paper around the bird ("halo"), and the plates' paper
+runs from (240,236,230) to (232,217,196) — so a sheet drawn at one tone shows every plate
+as a pasted rectangle. It runs once per plate (cached in `flattened`, reused by every
+30 s poll) and does four things:
+
+1. **measure the plate's own tone** — the median colour of the paper just inside its cut
+   edge. There is no fixed answer to measure against, which is why `PAPER` alone is not
+   enough;
+2. **flood that paper** — grow in from a one-pixel frame around the plate through
+   near-paper pixels (`FLOOD` levels from the measured tone, bright, unsaturated). What it
+   reaches *is* the halo, and it is painted `PAPER` flat. Seeding from the plate's outside
+   rather than from the cut matters: a cut whose alpha ramps over more than a few pixels
+   has no pixel "next to transparent" to start from, which is how half the plates kept
+   their scan paper. The same code covers a plate that was never cut out at all;
+3. **shift what the ink walls off** (paper between a bird's legs, under a tail) by the
+   difference between the two tones, `NEAR` levels either side (`paper_px` in the
+   original). Never flatten it: that is where a pale bird's white plumage lives, and
+   "anything pale is paper" is the bug that repainted white bellies, pale water and sky
+   and ate the illustration;
+4. **give the transparent pixels `PAPER`** so the soft edge of the cut-out reveals paper
+   rather than whatever sat under the alpha.
+
+`PAPER` is fugleramme's `TARGET_PAPER` (242, 237, 226) and must stay equal to `.collage`'s
+`--sheet`, or the rectangles come back. Measured on this repo's plates it leaves a mean
+~6% of bright low-saturation pixels more than 12 levels off the page tone, against ~22%
+for fugleramme's own `process_sprite` on the same assets — and ink pixels move by 0–1
+levels. **No `mix-blend-mode`:** the halo is already the sheet's tone, so there is nothing
+to blend, and the screen then shows exactly what prints. Print needs
+`print-color-adjust: exact` or the sheet prints white under the cream.
+
+The passes are per pixel, so the canvas is scaled to `WORK` (900 px) first — a plate is
+drawn at most 26cqh of a 210 mm sheet, so ~1200 px of scan is 2× more than the print
+resolves. All twelve plates cost ~1.7 s of main thread, once, on first load.
+
+**What stays is scenery, and that is correct.** A plate's painted ground, rocks, reeds and
+perch are inside the cut and are part of the drawing — the flood reaches only what is
+connected to the outside through near-paper pixels, so an enclosed ground stays. Do not
+"finish the job" by widening the flood until those go: past ~45 levels it crosses from a
+plate's paper onto a white bird's head and repaints it.
 
 **Non-obvious invariants (do not "simplify" these away):**
 

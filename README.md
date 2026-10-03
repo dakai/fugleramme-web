@@ -114,11 +114,17 @@ does not contact the registry.
   `0.14` so the heaviest reads ~2.5× the lightest — multiplied by the plate's own slack from
   `geometry.json`, so a loosely-cut scan still draws its bird at the right size. Biggest
   first, each plate standing on a shared baseline, captioned underneath in handwriting.
-  Every plate's paper is repainted to the sheet's tone in a canvas (`onPaper`) — fugleramme's
-  own `TARGET_PAPER`, aged cream rather than white, because the plates' paper is not white.
+  Each plate's paper is normalised onto the sheet's tone in a canvas (`onPaper`, a port of
+  fugleramme's `paper.process_sprite`): the plate's own paper tone is measured from its cut
+  edge, the paper reachable from outside is flooded and painted flat, and only the paper the
+  ink walls off is shifted — so white plumage, pale water and the painted ground under a bird
+  survive. `PAPER` is fugleramme's own `TARGET_PAPER`, aged cream rather than white, because
+  the plates' paper is not white.
 - **What you see is the sheet that prints.** The illustration frame is laid out as an A4
   landscape page: every bird and caption is sized in percent of the *sheet's* height, so the
-  screen composition and the PDF are the same page. Plates are drawn whole, never cropped.
+  screen composition and the PDF are the same page. Plates are drawn whole, never cropped,
+  and no blend mode is used — the paper is already the page's tone, so the screen and the
+  paper show the same thing.
 - **⤓ A4 PDF prints one frame per sheet.** The print stylesheet is A4 landscape with zero
   margin and hides everything but the current frame, so the browser's own *Save as PDF*
   writes a single A4 file for the frame on screen — no PDF library, nothing to install.

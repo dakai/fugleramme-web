@@ -193,9 +193,10 @@
       .collage .shot { display: flex; align-items: flex-end; justify-content: center; }
       .collage .shot img {
         /* --h 1 (the frame's biggest bird) is 26% of the sheet's height; three rows
-           of that plus captions is what keeps twelve birds on one A4 page. */
+           of that plus captions is what keeps twelve birds on one A4 page.
+           No blend mode: the halo is already the sheet's own tone (onPaper), so
+           there is nothing to blend, and what the screen shows is what prints. */
         height: calc(var(--h, 1) * 26cqh); width: auto;
-        mix-blend-mode: multiply;
       }
       .collage .hand {
         font-family: "Ma Shan Zheng", "Kaiti SC", "STKaiti", cursive;
@@ -221,11 +222,12 @@
         header, .controls, footer, .empty, .banner { display: none !important; }
         .sheet { max-width: none; padding: 0; min-height: 0; }
         main { display: block; }
+        /* Same sheet, in millimetres: zero page margin, or the paper shrinks
+           under the box and the collage spills onto a second page. */
         .collage {
           width: 297mm; height: 210mm; margin: 0; box-shadow: none;
           print-color-adjust: exact; -webkit-print-color-adjust: exact;
         }
-        .collage .shot img { mix-blend-mode: normal; }
         .collage .cell { break-inside: avoid; }
       }
       .empty {
@@ -433,35 +435,124 @@
         return d;
       };
 
-      /* fugleramme normalises every plate's paper to the page's own tone before
-         pasting it (paper.process_sprite), which is why its sheets read as paper
-         rather than as a wall of rectangles. Same idea, in a canvas: pale
-         low-saturation pixels become the sheet's paper and the edges disappear.
-         The tone is fugleramme's TARGET_PAPER — aged cream, never pure white,
-         because the plates' own paper is not white either. Once per plate; the
-         30 s poll reuses the result. */
+      /* fugleramme normalises each plate's paper halo onto the page's own tone
+         before pasting it (paper.process_sprite), which is why its sheets read
+         as paper rather than as a wall of rectangles. Same algorithm, in a
+         canvas, and it matters which way round it runs:
+
+           1. measure the plate's OWN paper tone: the median colour of the
+              opaque pixels beside its cut edge (its halo). Plates run from
+              (240,236,230) to (232,217,196), so there is no fixed answer;
+           2. the halo itself - the paper reachable from the cut edge through
+              near-paper pixels - is painted PAPER flat. Shifting it by the
+              difference between the two tones (fugleramme's smaller step) left
+              the halo's own shading in place, and against a flat page that
+              shading is the thing that reads as a pasted rectangle;
+           3. paper that the ink walls off (between a bird's legs, under a
+              tail) is only shifted, never flattened: it is part of the
+              drawing, and it holds a pale bird's white plumage too, which a
+              blanket "anything pale is paper" test repaints and eats;
+           4. the transparent pixels get PAPER as well, so the soft edge of the
+              cut-out reveals paper rather than whatever sat under the alpha.
+
+         PAPER is fugleramme's TARGET_PAPER, and it must stay equal to the
+         sheet's --sheet, or every plate reads as a rectangle again. Done once
+         per plate; the 30 s poll reuses the result. PNG, not webp: the halo is
+         a flat tone now, and a lossy re-encode stipples it. */
       const PAPER = [242, 237, 226];
+      const RING = 8;      // px: how far out to look for the plate's cut edge
+      const FLOOD = 25;    // levels: near enough to the halo tone to be paper
+      const NEAR = 50;     // levels: near enough to shift (fugleramme's gate)
+      const SAT = 55;      // levels: above this it is ink, never paper
+      const BRIGHT = 160;  // levels: below this it is ink, never paper
+      const SOLID = 128;   // alpha: below this the plate has no paper there
+      const WORK = 900;    // px: longest side the paper pass runs at
       const flattened = new Map();
+
       function onPaper(url, img) {
         const cached = flattened.get(url);
         if (cached) return cached;
         const canvas = document.createElement("canvas");
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
+        // Work at the size the plate is drawn, not the size it was scanned: a
+        // plate is at most 26cqh of a 210mm sheet (54mm, ~640 px at 300 dpi),
+        // while the scan is up to 1200 px - and every pass here is per pixel.
+        const k = Math.min(1, WORK / Math.max(img.naturalWidth, img.naturalHeight));
+        const w = canvas.width = Math.round(img.naturalWidth * k);
+        const h = canvas.height = Math.round(img.naturalHeight * k);
         const ctx = canvas.getContext("2d", { willReadFrequently: true });
-        ctx.drawImage(img, 0, 0);
-        const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(img, 0, 0, w, h);
+        const image = ctx.getImageData(0, 0, w, h);
         const { data } = image;
-        for (let i = 0; i < data.length; i += 4) {
-          const [r, g, b] = [data[i], data[i + 1], data[i + 2]];
-          if (Math.max(r, g, b) > 160 && Math.max(r, g, b) - Math.min(r, g, b) < 50) {
-            data[i] = PAPER[0];
-            data[i + 1] = PAPER[1];
-            data[i + 2] = PAPER[2];
+        const clear = (x, y) => data[(y * w + x) * 4 + 3] < SOLID;
+
+        // 1. the halo tone, from the paper just inside the cut edge
+        const r0 = [], g0 = [], b0 = [];
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            const i = (y * w + x) * 4;
+            if (data[i + 3] < SOLID) continue;
+            const edge = x < RING || y < RING || x >= w - RING || y >= h - RING ||
+              clear(x - RING, y) || clear(x + RING, y) || clear(x, y - RING) || clear(x, y + RING);
+            if (!edge) continue;
+            r0.push(data[i]); g0.push(data[i + 1]); b0.push(data[i + 2]);
+          }
+        }
+        const median = (a) => { a.sort((p, q) => p - q); return a[a.length >> 1]; };
+        const paper = r0.length > 50 ? [median(r0), median(g0), median(b0)] : PAPER;
+        const delta = PAPER.map((t, c) => t - paper[c]);
+        const near = (i, limit) => {
+          const r = data[i], g = data[i + 1], b = data[i + 2];
+          const hi = Math.max(r, g, b);
+          if (hi <= BRIGHT || hi - Math.min(r, g, b) >= SAT) return false;
+          return Math.max(Math.abs(r - paper[0]), Math.abs(g - paper[1]), Math.abs(b - paper[2])) < limit;
+        };
+
+        // 2. flood in from outside the plate through near-paper pixels: what it
+        //    reaches is the halo. Seeded from a one-pixel frame around the plate,
+        //    not from the cut itself - a cut whose alpha ramps over more than a
+        //    few pixels has no pixel "next to transparent" to start from, which
+        //    is how half these plates kept their scan paper. Same code covers a
+        //    plate that was never cut out at all.
+        const W = w + 2;
+        const halo = new Uint8Array(W * (h + 2));
+        const stack = [0];
+        halo[0] = 1;
+        while (stack.length) {
+          const q = stack.pop();
+          const qy = (q / W) | 0, qx = q - qy * W;
+          for (let k = 0; k < 4; k++) {
+            const n = k === 0 ? (qx > 0 ? q - 1 : -1)
+              : k === 1 ? (qx < W - 1 ? q + 1 : -1)
+              : k === 2 ? (qy > 0 ? q - W : -1)
+              : (qy < h + 1 ? q + W : -1);
+            if (n < 0 || halo[n]) continue;
+            const ny = ((n / W) | 0) - 1, nx = (n - ((n / W) | 0) * W) - 1;
+            if (nx >= 0 && ny >= 0 && nx < w && ny < h) {
+              const a = data[(ny * w + nx) * 4 + 3];
+              if (a >= SOLID && !near((ny * w + nx) * 4, FLOOD)) continue;
+            }
+            halo[n] = 1;
+            stack.push(n);
+          }
+        }
+
+        // 3. paint the halo flat, shift what the ink walls off, tone the void
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            const p = y * w + x, i = p * 4;
+            if (data[i + 3] < SOLID || halo[(y + 1) * W + x + 1]) {
+              data[i] = PAPER[0]; data[i + 1] = PAPER[1]; data[i + 2] = PAPER[2];
+              continue;
+            }
+            if (!near(i, NEAR)) continue;
+            for (let c = 0; c < 3; c++) {
+              data[i + c] = Math.max(0, Math.min(255, data[i + c] + delta[c]));
+            }
           }
         }
         ctx.putImageData(image, 0, 0);
-        const flat = canvas.toDataURL("image/webp", 0.92);
+        const flat = canvas.toDataURL("image/png");
         flattened.set(url, flat);
         return flat;
       }
