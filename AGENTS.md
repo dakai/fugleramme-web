@@ -52,27 +52,45 @@ custom property, so the 30 s re-render calls it once for the card still playing.
 `mode === "plate"` renders the **collage**, not the card grid: `PER_FRAME = 12` birds per
 frame, no buttons, no links, no pinyin, and species with no plate left out entirely.
 `frame` is the current page, `cell(bird, weight)` draws one cut-out plus handwritten
-English/中文名, `collageFrame()` sorts by `size` and scales each bird against the frame's
-**biggest** bird, so `--h` 1 is always the tallest plate on the sheet.
+English/中文名. `collageFrame()` sorts by `birdSize` — the bird's own mass term, not
+`size`, which carries the plate's slack and would let a wren on a leaf-heavy plate lead
+the sheet — and scales each plate against the frame's **biggest** plate, so `--h` 1 is
+always the tallest one.
 
 **The screen sheet is the paper sheet.** `.collage` is an A4 landscape box — `container-type:
 size`, `aspect-ratio: 297/210`, `--sheet` background — and every size inside it is in `cqh`
 (1% of the sheet's height), including the captions. The print block only changes the box to
 `297mm × 210mm` and drops everything but `.collage`, so `window.print()` writes exactly the
 page on screen: one A4 landscape file per frame. `@page { margin: 0 }` is required — any
-margin shrinks the sheet below its box and the content spills to a second page. The plate
-unit is `26cqh`; four rows of that plus captions is what bounds 12 birds to one page.
+margin shrinks the sheet below its box and the content spills to a second page.
 Cells are `width: max-content` on purpose: with a width cap the browser shrinks the plate
 to fit and the picture distorts or crops.
+
+**`fitFrame()` sizes the frame to fill the sheet, so `--unit` is searched, not fixed.**
+Twelve birds are two rows or three depending on how wide their plates are, and how much
+paper a plate carries is not the bird's size, so one hard-coded unit either leaves the
+sheet half bare or spills the last row onto a second page. The search walks `UNIT_MIN…64`
+in steps of two cqh and keeps the largest that still fits inside the sheet's padding. It
+waits for every image (`naturalWidth`), because the wrap depends on each plate's aspect
+ratio — which is also why `refit()` is debounced off every plate's `load`, and off
+`resize`. `align-content: center` distributes whatever slack the last step leaves. In
+`cqh`, so the sheet it fills on screen is the sheet it fills on paper; the printed page
+must stay one page after any change here.
 
 `⤓ A4 PDF` calls `window.print()`. That and the `@media print` block are the whole export
 feature — no PDF library, nothing to install.
 
-**Bird size is fugleramme's rule, ported.** `sizeWeight(sci, entry)` = AVONET body mass
-(`assets/bird-masses.json`, vendored, CC BY 4.0 — Tobias et al. 2022) ** 0.14 against the
-table median, times the plate's `span_ratio` from the cached `geometry.json`. Both halves
-return 1 when unknown. `enrich()` publishes it as `bird.size`. Do not replace it with plate
-pixel area: the mass term is what makes a bittern read bigger than a wagtail.
+**Bird size is fugleramme's rule, ported, and it is two numbers.** `massWeight(sci)` = AVONET
+body mass (`assets/bird-masses.json`, vendored, CC BY 4.0 — Tobias et al. 2022) ** 0.14
+against the table median: the bird's own size, published as `bird.birdSize` and the frame's
+ordering key. `sizeWeight(sci, entry)` multiplies that by the plate's slack from the cached
+`geometry.json` — **the cut's height over the bird's longest side**, because the weight is
+the height the plate is drawn at, so that product is what makes the bird itself land on its
+mass-derived size. Using the cut's *longest* side instead inflated every landscape plate by
+its aspect ratio (the curlew 1.6×, the heron 1.0×), which put a 150 g woodpecker above a
+1.4 kg heron. Do not replace either half with plate pixel area: the mass term is what makes
+a bittern read bigger than a wagtail, and the slack term is what makes a bird cut tight to
+its plate and one swimming in paper draw the same bird.
 
 **`onPaper(url, img)` is fugleramme's `paper.process_sprite`, ported to a canvas.** Every
 plate carries a ring of its own scan paper around the bird ("halo"), and the plates' paper
@@ -89,31 +107,35 @@ as a pasted rectangle. It runs once per plate (cached in `flattened`, reused by 
    rather than from the cut matters: a cut whose alpha ramps over more than a few pixels
    has no pixel "next to transparent" to start from, which is how half the plates kept
    their scan paper. The same code covers a plate that was never cut out at all;
-3. **shift what the ink walls off** (paper between a bird's legs, under a tail) by the
-   difference between the two tones, `NEAR` levels either side (`paper_px` in the
-   original). Never flatten it: that is where a pale bird's white plumage lives, and
-   "anything pale is paper" is the bug that repainted white bellies, pale water and sky
-   and ate the illustration;
+3. **pull what the ink walls off** (paper between a bird's legs, under a tail) toward `PAPER`
+   with a weight of `1 - dist/NEAR` (`NEAR` levels from the plate's own tone; `paper_px` in
+   the original). A pixel *at* that tone lands exactly on `PAPER`, one `NEAR` levels away
+   hardly moves. Never flatten it: that is where a pale bird's white plumage lives, and
+   "anything pale is paper" is the bug that repainted white bellies, pale water and sky and
+   ate the illustration. A fixed shift by the whole tone difference instead overshot
+   wherever a scan's paper varied the other way, and left the paler rectangles;
 4. **give the transparent pixels `PAPER`** so the soft edge of the cut-out reveals paper
    rather than whatever sat under the alpha.
 
 `PAPER` is fugleramme's `TARGET_PAPER` (242, 237, 226) and must stay equal to `.collage`'s
-`--sheet`, or the rectangles come back. Measured on this repo's plates it leaves a mean
-~6% of bright low-saturation pixels more than 12 levels off the page tone, against ~22%
-for fugleramme's own `process_sprite` on the same assets — and ink pixels move by 0–1
-levels. **No `mix-blend-mode`:** the halo is already the sheet's tone, so there is nothing
-to blend, and the screen then shows exactly what prints. Print needs
-`print-color-adjust: exact` or the sheet prints white under the cream.
+`--sheet`, or the rectangles come back. Measured on this repo's plates it leaves ~19% of
+bright low-saturation pixels more than 12 levels off the page tone at full plate size,
+against ~22% for fugleramme's own `process_sprite` on the same assets — and **ink pixels
+move by 0 levels**: the illustration is provably untouched. **No `mix-blend-mode`:** the
+halo is already the sheet's tone, so there is nothing to blend, and the screen then shows
+exactly what prints. Print needs `print-color-adjust: exact` or the sheet prints white
+under the cream.
 
 The passes are per pixel, so the canvas is scaled to `WORK` (900 px) first — a plate is
-drawn at most 26cqh of a 210 mm sheet, so ~1200 px of scan is 2× more than the print
-resolves. All twelve plates cost ~1.7 s of main thread, once, on first load.
+drawn at most `--unit` (≤64) cqh of a 210 mm sheet, so ~1200 px of scan is at least as much
+as the print resolves. All twelve plates cost ~1.7 s of main thread, once, on first load.
 
 **What stays is scenery, and that is correct.** A plate's painted ground, rocks, reeds and
 perch are inside the cut and are part of the drawing — the flood reaches only what is
 connected to the outside through near-paper pixels, so an enclosed ground stays. Do not
 "finish the job" by widening the flood until those go: past ~45 levels it crosses from a
-plate's paper onto a white bird's head and repaints it.
+plate's paper onto a white bird's head and repaints it. A plate that will not load has its
+cell removed instead — a frame keeps no holes, and the fit does not wait on it forever.
 
 **Non-obvious invariants (do not "simplify" these away):**
 

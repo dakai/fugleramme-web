@@ -121,16 +121,26 @@ const MASS_MEDIAN =
  *  without the smallest vanishing. Heaviest lands near 2.5x the lightest. */
 export const SIZE_EXPONENT = 0.14;
 
+/** The bird's own size: mass against the table median, with nothing of the plate
+ *  it happens to be cut from. This is what the frame is ordered by, so a heron
+ *  leads the sheet and a warbler ends it. */
+export const massWeight = (sci) => {
+  const mass = MASSES[kebab(sci)];
+  return mass && Number.isFinite(mass) ? (mass / MASS_MEDIAN) ** SIZE_EXPONENT : 1;
+};
+
 /** How big to draw a species, fugleramme's own rule: real body mass, times the
  *  plate's own slack so a loosely-cut scan still draws its bird at that size.
- *  1.0 whenever either half is unknown. `entry` is geometry.json's record. */
+ *  The weight is the height to draw the plate at, so the slack is `height` over
+ *  the bird's longest side — the bird then lands on its mass-derived size whatever
+ *  the plate's aspect or crop. The longest side instead inflated every landscape
+ *  plate by its aspect ratio, which put a woodpecker above a heron.
+ *  Unknown geometry draws at the mass term; unknown mass draws an average bird. */
 export function sizeWeight(sci, entry) {
-  const mass = MASSES[kebab(sci)];
-  const size = mass && Number.isFinite(mass) ? (mass / MASS_MEDIAN) ** SIZE_EXPONENT : 1;
   const [x0, y0, x1, y1] = entry?.box || [];
   const [width, height] = entry?.cut || [];
   const span = width > 0 && height > 0 ? Math.max((x1 - x0) * width, (y1 - y0) * height) : 0;
-  return size * (span > 0 ? Math.max(width, height) / span : 1);
+  return massWeight(sci) * (span > 0 ? height / span : 1);
 }
 
 /* ----------------------------------------------------------------- taxon */
@@ -259,8 +269,10 @@ async function enrich(birds) {
       return {
         ...bird,
         plateUrl: plate ? `/img/art/${plate.plate}` : null,
-        // How big to draw it in the collage: real body mass, plate slack folded in.
+        // How big to draw the plate in the collage (body mass, plate slack folded
+        // in) and how big the bird itself is, which is what the frame is sorted by.
         size: plate ? sizeWeight(aliases[bird.sci] || bird.sci, geometry[`birds/${plate.plate}`]) : 1,
+        birdSize: massWeight(bird.sci),
         zh: taxon.zh,
         pinyin: taxon.pinyin,
         credit: taxon.credit,

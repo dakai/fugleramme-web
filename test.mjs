@@ -1,6 +1,6 @@
 // Run: node test.mjs
 import assert from "node:assert/strict";
-import { englishWiki, groupDetections, kebab, pickPlate, sizeWeight, toPinyin, zhArticle } from "./server.mjs";
+import { englishWiki, groupDetections, kebab, massWeight, pickPlate, sizeWeight, toPinyin, zhArticle } from "./server.mjs";
 
 assert.equal(kebab("Zosterops simplex"), "zosterops-simplex");
 assert.equal(kebab("  Hylopezus  "), "hylopezus");
@@ -12,18 +12,33 @@ assert.equal(pickPlate(["anas-crecca-2.webp"], "Anas crecca"), "anas-crecca-2.we
 assert.equal(pickPlate(files, "Psilopogon cristatus"), null);
 
 // Bird size: fugleramme's rule. A known mass gives mass**0.14 against the table
-// median; a plate cut tight to its bird multiplies by 1. A loose crop (the bird
-// fills half the plate's long side) doubles it so the bird itself still lands at
-// the mass-derived size. Nothing known anywhere leaves it at 1.
+// median. The plate's slack only says how tall to draw the plate so that bird
+// lands at that size: a plate cut tight to its bird needs no slack, a loose crop
+// needs the plate drawn taller. The bird is what must come out the same, so two
+// very different crops of one species draw the same bird.
 const tight = { box: [0, 0, 1, 1], cut: [1200, 900] };
-const loose = { box: [0, 0, 0.5, 0.5], cut: [1200, 1200] };
-assert.equal(sizeWeight("Corvus corax", undefined).toFixed(2), sizeWeight("Corvus corax", tight).toFixed(2));
-assert.equal(sizeWeight("Corvus corax", loose).toFixed(4), (2 * sizeWeight("Corvus corax", tight)).toFixed(4));
-// An eagle draws bigger than a white-eye; a species fugleramme has no plate for
-// is unknown to the mass table and draws at 1.
-assert.ok(sizeWeight("Zosterops simplex", tight) < 1);
-assert.ok(sizeWeight("Gyps fulvus", tight) > 1);
-assert.equal(sizeWeight("Zzyzx nonexistentia", tight), 1);
+const loose = { box: [0.25, 0, 0.75, 0.5], cut: [1600, 600] };
+/** The bird's own longest side once the plate is drawn at `sizeWeight`. */
+const birdPx = (sci, entry) => {
+  const [x0, y0, x1, y1] = entry.box;
+  const [width, height] = entry.cut;
+  const span = Math.max((x1 - x0) * width, (y1 - y0) * height);
+  return (sizeWeight(sci, entry) * span) / height; // plate height x the bird's share of it
+};
+assert.equal(birdPx("Corvus corax", tight).toFixed(6), birdPx("Corvus corax", loose).toFixed(6));
+// With no geometry the plate is drawn at the mass term, so the bird comes out at
+// the mass term too.
+assert.equal(birdPx("Corvus corax", tight).toFixed(6), sizeWeight("Corvus corax", undefined).toFixed(6));
+// An eagle draws bigger than a white-eye; no geometry at all leaves the mass term
+// alone, and a species with no plate for it is unknown to the mass table.
+assert.ok(sizeWeight("Zosterops simplex", undefined) < 1);
+assert.ok(sizeWeight("Gyps fulvus", undefined) > 1);
+assert.equal(sizeWeight("Zzyzx nonexistentia", undefined), 1);
+// The bird's own weight is the mass term and nothing else: the frame is ordered by
+// it, so the plate a species happens to be cut from cannot put it first.
+assert.equal(massWeight("Corvus corax"), sizeWeight("Corvus corax", undefined));
+assert.ok(massWeight("Ardea cinerea") > massWeight("Alcedo atthis"));
+assert.equal(massWeight("Zzyzx nonexistentia"), 1);
 
 const day = Date.parse("2026-10-01T13:38:30+08:00");
 const rows = [

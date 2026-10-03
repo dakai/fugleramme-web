@@ -111,20 +111,23 @@ does not contact the registry.
   into another frame (`◀ 第 1 / 2 帧 ▶`).
 - **The collage is drawn the way fugleramme draws it.** Birds are sized by **real body
   mass** — AVONET grams (`assets/bird-masses.json`, Tobias et al. 2022, CC BY 4.0) raised to
-  `0.14` so the heaviest reads ~2.5× the lightest — multiplied by the plate's own slack from
-  `geometry.json`, so a loosely-cut scan still draws its bird at the right size. Biggest
-  first, each plate standing on a shared baseline, captioned underneath in handwriting.
+  `0.14` so the heaviest reads ~2.5× the lightest — and the plate that carries a bird is
+  drawn tall enough for it to land at that size, however loose its crop (`geometry.json`).
+  So a heron leads the sheet and a warbler ends it, and two very different plates of one
+  species draw the same bird. Each plate stands on a shared baseline, captioned underneath
+  in handwriting.
   Each plate's paper is normalised onto the sheet's tone in a canvas (`onPaper`, a port of
   fugleramme's `paper.process_sprite`): the plate's own paper tone is measured from its cut
   edge, the paper reachable from outside is flooded and painted flat, and only the paper the
-  ink walls off is shifted — so white plumage, pale water and the painted ground under a bird
-  survive. `PAPER` is fugleramme's own `TARGET_PAPER`, aged cream rather than white, because
-  the plates' paper is not white.
+  ink walls off is pulled toward the tone — so white plumage, pale water and the painted
+  ground under a bird survive untouched. `PAPER` is fugleramme's own `TARGET_PAPER`, aged
+  cream rather than white, because the plates' paper is not white.
 - **What you see is the sheet that prints.** The illustration frame is laid out as an A4
   landscape page: every bird and caption is sized in percent of the *sheet's* height, so the
-  screen composition and the PDF are the same page. Plates are drawn whole, never cropped,
-  and no blend mode is used — the paper is already the page's tone, so the screen and the
-  paper show the same thing.
+  screen composition and the PDF are the same page. The birds are then drawn as large as the
+  sheet allows, so a frame of twelve fills the page instead of sitting in the middle of it.
+  Plates are drawn whole, never cropped, and no blend mode is used — the paper is already the
+  page's tone, so the screen and the paper show the same thing.
 - **⤓ A4 PDF prints one frame per sheet.** The print stylesheet is A4 landscape with zero
   margin and hides everything but the current frame, so the browser's own *Save as PDF*
   writes a single A4 file for the frame on screen — no PDF library, nothing to install.

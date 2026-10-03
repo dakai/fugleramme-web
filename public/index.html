@@ -175,12 +175,19 @@
         /* fugleramme's own paper tone (paper.TARGET_PAPER) — the plates are aged
            cream, so the sheet they sit on is too, never a white box. */
         --sheet: #f2ede2;
+        /* How tall the frame's biggest bird is drawn, in percent of the sheet's
+           height. fitFrame() raises it until the frame fills the sheet. */
+        --unit: 26;
         container-type: size;
         aspect-ratio: 297 / 210;
         width: min(100%, calc((100dvh - 190px) * 1.414));
         margin: auto;
         padding: 4%;
         display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: center;
+        /* The rows are centred on the paper as a block: a frame with 12 birds in
+           three rows used to sit against the top edge and leave the last third of
+           the sheet bare. */
+        align-content: center;
         gap: 2% 2.5%;
         background: var(--sheet);
         box-shadow: 0 2px 10px rgba(44, 38, 32, 0.16);
@@ -192,11 +199,11 @@
       }
       .collage .shot { display: flex; align-items: flex-end; justify-content: center; }
       .collage .shot img {
-        /* --h 1 (the frame's biggest bird) is 26% of the sheet's height; three rows
-           of that plus captions is what keeps twelve birds on one A4 page.
+        /* --h 1 (the frame's biggest bird) is --unit percent of the sheet's
+           height; 12 birds on one A4 page is what the search in fitFrame holds to.
            No blend mode: the halo is already the sheet's own tone (onPaper), so
            there is nothing to blend, and what the screen shows is what prints. */
-        height: calc(var(--h, 1) * 26cqh); width: auto;
+        height: calc(var(--h, 1) * var(--unit, 26) * 1cqh); width: auto;
       }
       .collage .hand {
         font-family: "Ma Shan Zheng", "Kaiti SC", "STKaiti", cursive;
@@ -420,7 +427,10 @@
         img.loading = "lazy";
         img.alt = bird.zh || bird.en;
         img.src = url;
-        img.addEventListener("load", () => { img.src = onPaper(url, img); }, { once: true });
+        img.addEventListener("load", () => { img.src = onPaper(url, img); refit(); }, { once: true });
+        // A plate that will not load takes its cell with it, or the frame keeps a
+        // hole and never fits, since the fit waits on every image's own size.
+        img.addEventListener("error", () => { el.remove(); refit(); }, { once: true });
         const el2 = document.createElement("div");
         el2.className = "shot";
         el2.append(img);
@@ -500,7 +510,6 @@
         }
         const median = (a) => { a.sort((p, q) => p - q); return a[a.length >> 1]; };
         const paper = r0.length > 50 ? [median(r0), median(g0), median(b0)] : PAPER;
-        const delta = PAPER.map((t, c) => t - paper[c]);
         const near = (i, limit) => {
           const r = data[i], g = data[i + 1], b = data[i + 2];
           const hi = Math.max(r, g, b);
@@ -537,7 +546,12 @@
           }
         }
 
-        // 3. paint the halo flat, shift what the ink walls off, tone the void
+        // 3. paint the halo flat, pull what the ink walls off onto the page tone,
+        //    and tone the void. The pull is proportional to how close the pixel is
+        //    to the plate's tone: a pixel AT that tone lands exactly on PAPER, one
+        //    at NEAR levels away hardly moves. Shifting everything by a fixed
+        //    delta instead (fugleramme's smaller step) overshot wherever the scan's
+        //    paper varied the other way, which left the paler rectangles.
         for (let y = 0; y < h; y++) {
           for (let x = 0; x < w; x++) {
             const p = y * w + x, i = p * 4;
@@ -545,10 +559,15 @@
               data[i] = PAPER[0]; data[i + 1] = PAPER[1]; data[i + 2] = PAPER[2];
               continue;
             }
-            if (!near(i, NEAR)) continue;
-            for (let c = 0; c < 3; c++) {
-              data[i + c] = Math.max(0, Math.min(255, data[i + c] + delta[c]));
-            }
+            const r = data[i], g = data[i + 1], b = data[i + 2];
+            const hi = Math.max(r, g, b);
+            if (hi <= BRIGHT || hi - Math.min(r, g, b) >= SAT) continue;
+            const dist = Math.max(Math.abs(r - paper[0]), Math.abs(g - paper[1]), Math.abs(b - paper[2]));
+            if (dist >= NEAR) continue;
+            const pull = 1 - dist / NEAR;
+            data[i] = Math.round(r + (PAPER[0] - r) * pull);
+            data[i + 1] = Math.round(g + (PAPER[1] - g) * pull);
+            data[i + 2] = Math.round(b + (PAPER[2] - b) * pull);
           }
         }
         ctx.putImageData(image, 0, 0);
@@ -559,15 +578,49 @@
 
       /* The collage is drawn the way fugleramme draws it: biggest birds first,
          every bird scaled by `size` (body mass ** 0.14 x the plate's own slack)
-         against the frame's biggest bird, so an eagle towers over a goldcrest. */
+         against the frame's biggest bird, so an eagle towers over a goldcrest.
+         Ordered by `birdSize` — the bird alone — because `size` carries the plate's
+         slack too, and a wren on a leaf-heavy plate would otherwise lead the sheet. */
       function collageFrame(birds) {
-        // Against the frame's biggest bird, not its mean: the tallest plate is
+        // Against the frame's biggest plate, not its mean: the tallest plate is
         // then always --h 1, which is what bounds the sheet to one A4 page.
         const max = Math.max(...birds.map((b) => b.size), 0) || 1;
         return [...birds]
-          .sort((a, b) => b.size - a.size)
+          .sort((a, b) => (b.birdSize ?? b.size) - (a.birdSize ?? a.size))
           .map((b) => cell(b, b.size / max));
       }
+
+      /* A frame fills its sheet, whatever it holds. Twelve birds are two rows or
+         three depending on how wide their plates are, and how much paper a plate
+         carries is not the bird's size — so a fixed bird size either leaves the
+         sheet half bare or spills the last row onto a second page. The unit walks
+         up from small and keeps the largest that still fits, like fugleramme's own
+         size search. cqh, so the sheet it fills on screen is the sheet it fills on
+         paper. */
+      const UNIT_MIN = 12;   // an A4 sheet of forty birds still shows them
+      const UNIT_MAX = 64;   // one bird alone on the sheet
+      function fitFrame() {
+        if (!collage.children.length) return;
+        // The wrap depends on each plate's aspect ratio, which only the loaded
+        // image knows; a fit before then would size the frame for blank cells.
+        const imgs = [...collage.querySelectorAll("img")];
+        if (!imgs.length || imgs.some((i) => !i.naturalWidth)) return;
+        const sheet = collage.getBoundingClientRect();
+        const pad = sheet.width * 0.04;               // the sheet's own 4% padding
+        const inner = sheet.height - 2 * pad;
+        let best = UNIT_MIN;
+        for (let unit = UNIT_MIN; unit <= UNIT_MAX; unit += 2) {
+          collage.style.setProperty("--unit", unit);
+          const bottom = Math.max(...[...collage.children].map((c) => c.getBoundingClientRect().bottom));
+          if (bottom > sheet.top + pad + inner) break;
+          best = unit;
+        }
+        collage.style.setProperty("--unit", best);
+      }
+
+      /* Every plate restates the fit as it arrives; one debounce covers the burst. */
+      let fitTimer = 0;
+      const refit = () => { clearTimeout(fitTimer); fitTimer = setTimeout(fitFrame, 40); };
 
       /* The play button doubles as the progress bar: --p is 0…1, filled from the left. */
       function showPlay(btn, el) {
@@ -635,6 +688,7 @@
         collage.replaceChildren(
           ...(plate ? collageFrame(drawn.slice(frame * PER_FRAME, (frame + 1) * PER_FRAME)) : []),
         );
+        if (plate) fitFrame();
         // The empty state belongs to the view on screen: photo mode is never
         // empty just because no species has a plate.
         empty.hidden = !data || (plate ? drawn.length : birds.length) > 0;
@@ -672,6 +726,8 @@
       load();
       setInterval(load, 30000);
       document.addEventListener("visibilitychange", () => !document.hidden && load());
+      // The sheet's box follows the window, so the frame's fit does too.
+      addEventListener("resize", refit);
     </script>
   </body>
 </html>
