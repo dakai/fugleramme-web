@@ -286,10 +286,14 @@ async function enrich(birds) {
 
 /* ------------------------------------------------------------------ frame */
 
-let frameCache = { at: 0, body: null };
+let frameCache = { at: 0, hours: 0, body: null };
 
 export async function buildFrame(hours) {
-  if (frameCache.body && Date.now() - frameCache.at < FRAME_TTL_MS) return frameCache.body;
+  // Keyed by the window: a cached 1 h frame must not answer a 168 h request, or
+  // changing the time window shows the old window's birds for up to FRAME_TTL_MS.
+  if (frameCache.body && frameCache.hours === hours && Date.now() - frameCache.at < FRAME_TTL_MS) {
+    return frameCache.body;
+  }
   const res = await getJSON(`${BIRDNA}/api/v2/detections?limit=500`);
   const rows = Array.isArray(res) ? res : res.data || [];
   const since = Date.now() - hours * 3600_000;
@@ -303,7 +307,7 @@ export async function buildFrame(hours) {
     detections: rows.length,
     birds,
   };
-  frameCache = { at: Date.now(), body };
+  frameCache = { at: Date.now(), hours, body };
   return body;
 }
 

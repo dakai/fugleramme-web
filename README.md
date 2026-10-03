@@ -102,7 +102,8 @@ does not contact the registry.
 
 - `GET /api/frame?hours=24` — detections in the window, grouped per species, each enriched
   with plate, photo and 中文名. `hours` is clamped to 1…168.
-- The page polls every 30 s; the server rebuilds a frame at most every 20 s.
+- The page polls every 30 s; the server rebuilds a frame at most every 20 s **per time
+  window** (`?hours=` is part of the cache key).
 - 照片 Photo is the default view (whole image, not cropped), and it is where the call is
   played, the false positive dropped and the names read. 插画 Illustration is the
   **fugleramme collage**: up to **12 plates on one frame**, nothing else — no buttons, no
