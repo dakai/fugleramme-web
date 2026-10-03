@@ -197,7 +197,13 @@
         /* max-content: a plate is never squeezed to fit, so it is never cropped. */
         width: max-content;
       }
-      .collage .shot { display: flex; align-items: flex-end; justify-content: center; }
+      .collage .shot {
+        display: flex; align-items: flex-end; justify-content: center;
+        /* Give the image row its full height. Otherwise flex sizing can shrink
+           this wrapper while leaving the image at --h, so its top overflows
+           the row and is clipped by the collage sheet. */
+        height: calc(var(--h, 1) * var(--unit, 26) * 1cqh);
+      }
       .collage .shot img {
         /* --h 1 (the frame's biggest bird) is --unit percent of the sheet's
            height; 12 birds on one A4 page is what the search in fitFrame holds to.
