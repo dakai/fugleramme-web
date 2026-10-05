@@ -6,18 +6,6 @@ English**, and can be shown as **1800s hand-cut plates** or as **real photos**.
 
 Point it at a station, open the page, put it on a screen.
 
-```
-┌──────────────────────────────┐
-│ 15 species · 51 calls in 24h │   ← everything the frame needs is one endpoint
-│ [照片 Photo][插画 Illustration] │   ← 照片 by default, 插画 on click
-│ ┌────────┐ ┌────────┐ ┌─────┐ │
-│ │ plate  │ │ plate  │ │photo│ │   ← toggle switches every card at once
-│ │ 白鹭    │ │ 绿翅鸭  │ │棕背伯劳│ │
-│ │ Little │ │ Eurasian│ │Long- │ │   ← each card: 中文名 · English · 学名
-│ │ Egret  │ │ Teal   │ │tailed│ │
-│ └────────┘ └────────┘ └─────┘ │      + ▶录音 · ✕误报 · 维基百科 / iNaturalist
-```
-
 ![The photo view: one card per species, with 班鸫 / Dusky Thrush / Turdus eunomus, the call count and confidence, and the 录音 Play, 维基百科, iNaturalist and 误报 false positive buttons](screenshot-photo-view.png)
 
 ## Run it
