@@ -104,7 +104,9 @@
       .controls .nav:disabled { opacity: 0.55; cursor: default; }
       select {
         font: inherit;
-        font-size: clamp(12px, 1.2vw, 15px);
+        /* A step under the buttons and the frame label: the pill's options are
+           Chinese, and CJK at the same pixel size reads larger than Latin. */
+        font-size: clamp(11px, 1vw, 13px);
         padding: 7px 10px;
         border: 1px solid var(--rule);
         border-radius: 999px;
