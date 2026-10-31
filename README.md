@@ -210,9 +210,9 @@ The sticker sheet was checked the same way: a white A4 page, 12 stickers with bo
 captions, one frame per page (`pdfinfo`: 1 page, 841.92 × 595.92 pt, white corner), and
 switching sticker → illustration → photo → sticker in one session.
 `/api/taxonomy` answers 44 orders / 250 families / 11,064 species from the vendored asset —
-1,394,278 bytes, 313,729 gzipped, 204 ms on the first call and memoised after that, with
-the library's 33 MB `species.json` made unreachable to prove no download happens. The 分类
-page was walked in Chromium: 44 order cards, 雀形目 → 143 family rows including
+1,394,278 bytes, 312,725 gzipped on the wire, 204 ms on the first call and memoised after
+that, with the library's 33 MB `species.json` made unreachable to prove no download happens.
+The 分类 page was walked in Chromium: 44 order cards, 雀形目 → 143 family rows including
 鸫科 · Thrushes · 190 种, 鸫科 → 190 sticker tiles. Pinyin sits over all 44 目 names, all
 250 科 names and 188 of the 190 species (two recent splits have no Chinese name); 维基百科
 is on every tile and iNaturalist where the library carries a taxon id.
