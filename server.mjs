@@ -7,6 +7,7 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { gzipSync } from "node:zlib";
 import { pinyin } from "pinyin-pro";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -17,9 +18,12 @@ const BIRDNA = (process.env.BIRDNA_URL || "http://192.168.10.207:8080").replace(
 const INAT = "https://api.inaturalist.org/v1";
 const FUGLERAMME_RAW =
   "https://raw.githubusercontent.com/arnegiacomo/fugleramme/main/assets";
+const STICKER_RAW =
+  "https://raw.githubusercontent.com/alchaincyf/huashu-bird-sticker/main";
 const PORT = Number(process.env.PORT || 8090);
 const FETCH_MS = Number(process.env.FETCH_TIMEOUT_MS || 20000);
-/** How long a built frame is reused; the page polls more often than this. */
+/** How long a built frame is reused, so a page load does not re-read the station;
+ *  `?refresh=1` (the page's ⟳ button) skips it. */
 const FRAME_TTL_MS = 20000;
 
 const DIRS = {
@@ -27,6 +31,7 @@ const DIRS = {
   photo: path.join(DATA, "photo"),
   taxon: path.join(DATA, "taxon"),
   json: path.join(DATA, "json"),
+  sticker: path.join(DATA, "sticker"),
 };
 
 const MIME = {
@@ -78,6 +83,9 @@ async function downloadTo(url, file) {
   if (await exists(file)) return true;
   const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_MS) });
   if (!res.ok) return false;
+  // Stickers are cached under DATA/sticker/<Order>/<Family>/, so the parent
+  // may not exist yet.
+  await mkdir(path.dirname(file), { recursive: true });
   await writeFile(file, Buffer.from(await res.arrayBuffer()));
   return true;
 }
@@ -105,6 +113,77 @@ async function plateFor(sci, manifest, aliases) {
   const url = `${FUGLERAMME_RAW}/artwork/classic/birds/${file}`;
   const ok = await downloadTo(url, path.join(DIRS.art, file));
   return ok ? { plate: file, plateSource: manifest.meta[`birds/${file}`]?.url || null } : null;
+}
+
+/* --------------------------------------------------------------- stickers */
+
+/** The library's zh.wikipedia URLs are article paths; the page only needs the title. */
+const wikiTitle = (url) => {
+  const prefix = "https://zh.wikipedia.org/wiki/";
+  if (typeof url !== "string" || !url.startsWith(prefix)) return "";
+  try {
+    return decodeURIComponent(url.slice(prefix.length));
+  } catch {
+    return "";
+  }
+};
+
+/** Trim the sticker library's species.json into the taxonomy both pages render:
+ *  orders -> families -> species, in IOC sequence. 33 MB upstream, 1.2 MB here.
+ *  Each species keeps what a tile shows and nothing else: the two names, the
+ *  library's own tone-marked pinyin, its Chinese Wikipedia title and its
+ *  iNaturalist taxon id (the last two are absent for most species). */
+export function taxonomyIndex(species) {
+  const orders = [];
+  const byOrder = new Map();
+  const byFamily = new Map();
+  for (const x of species) {
+    const t = x.taxonomy || {}, zh = x.zh || {}, names = x.names || {};
+    if (!x.id || !t.order || !t.family || !(x.sticker || {}).file) continue;
+    let o = byOrder.get(t.order);
+    if (!o) byOrder.set(t.order, (o = { o: t.order, zh: zh.order || "", n: 0, families: [] })), orders.push(o);
+    if (!o.zh && zh.order) o.zh = zh.order;
+    const key = `${t.order}\t${t.family}`;
+    let f = byFamily.get(key);
+    if (!f) {
+      f = { f: t.family, zh: zh.family || "", en: t.familyEnglish || t.family, n: 0, s: [] };
+      byFamily.set(key, f);
+      o.families.push(f);
+    }
+    if (!f.zh && zh.family) f.zh = zh.family;
+    f.n++, o.n++;
+    f.s.push({
+      i: x.id,
+      en: names.en || "",
+      zh: names["zh-Hans"] || "",
+      py: zh.pinyin || "",
+      w: wikiTitle(zh.wikipedia),
+      n: (x.ids || {}).inaturalist || 0,
+    });
+  }
+  // The library carries no pinyin for a taxon's own name, so the 目/科 headings
+  // are romanized here, once, from the Chinese names the records did carry.
+  for (const o of orders) {
+    o.py = toPinyin(o.zh);
+    for (const f of o.families) f.py = toPinyin(f.zh);
+  }
+  return { orders };
+}
+
+let library = null;          // { data, byId }
+
+/** The library index, read once from the vendored asset. It is in the repo
+ *  (`assets/stickers.json`, generated from the library's 33 MB species.json) so
+ *  neither the frame nor the 分类 page depends on a first-use download.
+ *  `byId` is the frame's scientificName -> "Order/Family/id.webp". */
+async function stickerIndex() {
+  if (library) return library;
+  const data = JSON.parse(await readFile(path.join(ROOT, "assets", "stickers.json"), "utf8"));
+  const byId = new Map();
+  for (const o of data.orders) for (const f of o.families) for (const s of f.s) {
+    byId.set(s.i, `${o.o}/${f.f}/${s.i}.webp`);
+  }
+  return (library = { data, byId });
 }
 
 /* -------------------------------------------------------------- bird size */
@@ -255,12 +334,22 @@ async function enrich(birds) {
     getJSON(`${FUGLERAMME_RAW}/artwork/classic/geometry.json`).catch(() => ({})),
   );
 
+  // Resolved once for the frame, never per bird: the library index is 863 kB.
+  const stickers = await stickerIndex().catch(() => null);
+  /** A station across a reclassification reports the old genus; the library is
+   *  filed under the current one, like the plates. */
+  const stickerOf = (sci) =>
+    stickers?.byId.get((aliases[sci] || sci).replace(/ /g, "_")) ||
+    stickers?.byId.get(sci.replace(/ /g, "_")) ||
+    null;
+
   return Promise.all(
     birds.map(async (bird) => {
       const [plate, taxon] = await Promise.all([
         plateFor(bird.sci, manifest, aliases).catch(() => null),
         resolveTaxon(bird.sci).catch(() => ({ zh: null, pinyin: null, photo: null, credit: null })),
       ]);
+      const st = stickerOf(bird.sci);
       let photoPath = null;
       if (taxon.photo) {
         const saved = await downloadTo(taxon.photo, photoFile(bird.sci)).catch(() => false);
@@ -269,6 +358,7 @@ async function enrich(birds) {
       return {
         ...bird,
         plateUrl: plate ? `/img/art/${plate.plate}` : null,
+        stickerUrl: st ? `/img/sticker/${st}` : null,
         // How big to draw the plate in the collage (body mass, plate slack folded
         // in) and how big the bird itself is, which is what the frame is sorted by.
         size: plate ? sizeWeight(aliases[bird.sci] || bird.sci, geometry[`birds/${plate.plate}`]) : 1,
@@ -288,10 +378,12 @@ async function enrich(birds) {
 
 let frameCache = { at: 0, hours: 0, body: null };
 
-export async function buildFrame(hours) {
+/** `fresh` is the page's explicit refresh: it rebuilds even inside FRAME_TTL_MS,
+ *  which otherwise only absorbs a re-render the user did not ask for. */
+export async function buildFrame(hours, fresh = false) {
   // Keyed by the window: a cached 1 h frame must not answer a 168 h request, or
   // changing the time window shows the old window's birds for up to FRAME_TTL_MS.
-  if (frameCache.body && frameCache.hours === hours && Date.now() - frameCache.at < FRAME_TTL_MS) {
+  if (!fresh && frameCache.body && frameCache.hours === hours && Date.now() - frameCache.at < FRAME_TTL_MS) {
     return frameCache.body;
   }
   const res = await getJSON(`${BIRDNA}/api/v2/detections?limit=500`);
@@ -314,6 +406,9 @@ export async function buildFrame(hours) {
 /* ------------------------------------------------------------------ serve */
 
 const STATIC_FALLBACK = "index.html";
+/** The taxonomy payload and its gzip, built once: 1.4 MB of JSON per request
+ *  otherwise, and the asset never changes under a running process. */
+const taxonomyBody = { raw: null, gz: null };
 
 async function serveFile(res, file, { download = false } = {}) {
   const body = await readFile(file);
@@ -373,7 +468,7 @@ async function handle(req, res) {
   if (p === "/api/frame") {
     const hours = Math.min(Math.max(Number(url.searchParams.get("hours")) || 24, 1), 168);
     try {
-      const body = await buildFrame(hours);
+      const body = await buildFrame(hours, url.searchParams.get("refresh") === "1");
       res.writeHead(200, { "content-type": MIME[".json"], "cache-control": "no-store" });
       res.end(JSON.stringify(body));
     } catch (err) {
@@ -386,6 +481,45 @@ async function handle(req, res) {
         res.end(JSON.stringify({ error: String(err), detector: BIRDNA }));
       }
     }
+    return;
+  }
+
+  // The whole sticker library's taxonomy, for the 分类 page. Read from the
+  // vendored asset, so this never touches the network.
+  if (p === "/api/taxonomy") {
+    try {
+      if (!taxonomyBody.raw) {
+        taxonomyBody.raw = Buffer.from(JSON.stringify((await stickerIndex()).data));
+        taxonomyBody.gz = gzipSync(taxonomyBody.raw);
+      }
+      const gz = /\bgzip\b/.test(req.headers["accept-encoding"] || "");
+      const out = gz ? taxonomyBody.gz : taxonomyBody.raw;
+      res.writeHead(200, {
+        "content-type": MIME[".json"],
+        // Short: the payload is immutable per build, but an image update must not
+        // be invisible for an hour.
+        "cache-control": "public, max-age=300",
+        "content-length": out.length,
+        ...(gz ? { "content-encoding": "gzip" } : {}),
+      });
+      res.end(out);
+    } catch (err) {
+      res.writeHead(503, { "content-type": MIME[".json"], "cache-control": "no-store" });
+      res.end(JSON.stringify({ error: String(err), asset: "assets/stickers.json" }));
+    }
+    return;
+  }
+
+  // Sticker library images, cached under DATA/sticker/<Order>/<Family>/. The
+  // filename is the library's own id (Genus_species), which is also the map key.
+  const stickerFile = /^\/img\/sticker\/([A-Za-z]+)\/([A-Za-z]+)\/([A-Za-z_]+\.webp)$/.exec(p);
+  if (stickerFile) {
+    const [, order, family, name] = stickerFile;
+    const file = path.join(DIRS.sticker, order, family, name);
+    const ok =
+      (await exists(file)) ||
+      (await downloadTo(`${STICKER_RAW}/stickers/${order}/${family}/${name}`, file).catch(() => false));
+    ok ? serveFile(res, file, { download: true }) : notFound(res);
     return;
   }
 

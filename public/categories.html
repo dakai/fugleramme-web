@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>分类 · Fugleramme</title>
+    <style>
+      :root {
+        --paper: #efe7d6;
+        --paper-2: #e5dac3;
+        --ink: #2c2620;
+        --ink-soft: #6b5f4d;
+        --rule: #c9b997;
+        --accent: #7c5b34;
+        --card: #f7f1e4;
+        color-scheme: light;
+      }
+      * { box-sizing: border-box; }
+      /* Author `display` beats the UA's `[hidden] { display: none }`; the note is
+         a block, so the rule is kept for anything else set hidden here. */
+      [hidden] { display: none !important; }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        background:
+          radial-gradient(120% 90% at 50% -10%, #f6f0e2 0%, var(--paper) 45%, var(--paper-2) 100%);
+        color: var(--ink);
+        font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia,
+          "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      .sheet {
+        max-width: 1500px;
+        margin: 0 auto;
+        padding: clamp(18px, 3vw, 48px);
+        min-height: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: clamp(18px, 2.4vw, 32px);
+      }
+      header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+        border-bottom: 1px solid var(--rule);
+        padding-bottom: 14px;
+      }
+      h1 {
+        font-size: clamp(28px, 4vw, 54px);
+        margin: 0;
+        font-weight: 500;
+        letter-spacing: 0.04em;
+      }
+      h1 small {
+        display: block;
+        font-size: clamp(11px, 1.1vw, 15px);
+        letter-spacing: 0.34em;
+        text-transform: uppercase;
+        color: var(--ink-soft);
+        font-weight: 400;
+        margin-top: 6px;
+      }
+      .nav {
+        font: inherit; font-size: clamp(12px, 1.2vw, 16px); padding: 8px 20px;
+        border: 1px solid var(--ink); border-radius: 999px; background: var(--card);
+        color: var(--ink); text-decoration: none; letter-spacing: 0.08em;
+      }
+      .nav:hover, .nav:focus-visible { background: var(--ink); color: var(--paper); }
+
+      .crumbs {
+        display: flex; flex-wrap: wrap; gap: 6px;
+        font-size: 13px; color: var(--ink-soft); letter-spacing: 0.04em;
+      }
+      .crumbs a { color: var(--accent); }
+      .crumbs .sep { color: var(--rule); }
+
+      main { flex: 1; }
+      .note {
+        margin: 0 0 14px; padding: 8px 14px; border-radius: 4px;
+        background: #f6d9d0; border: 1px solid #c98b76; color: #6d2b18; font-size: 14px;
+      }
+      /* One render() writes every level; the class says which grid it is. */
+      #view { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+      #view.list-grid { grid-template-columns: 1fr; gap: 0; }
+      #view.species-grid { grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); }
+
+      .order, .family, .species {
+        background: var(--card);
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        text-align: left;
+      }
+      .order, .family { font: inherit; color: inherit; cursor: pointer; }
+      .order:hover, .order:focus-visible,
+      .family:hover, .family:focus-visible { border-color: var(--ink); }
+      .order:focus-visible, .family:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+      .order { padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+      .order .names, .family .names, .species .names { display: flex; flex-direction: column; gap: 2px; }
+      .order .py, .family .py { font-size: 11px; letter-spacing: 0.06em; color: var(--ink-soft); }
+      .order .zh { font-size: clamp(22px, 2.2vw, 30px); line-height: 1.2; }
+      .order .la {
+        font-style: italic; letter-spacing: 0.08em; font-size: 13px; color: var(--ink-soft);
+      }
+      .order .n { font-size: 13px; color: var(--ink-soft); }
+      .thumbs { display: flex; gap: 8px; }
+      .thumb { width: 54px; height: 54px; padding: 4px; }
+
+      .family { padding: 10px 14px; display: grid; grid-template-columns: 64px 1fr auto; align-items: center; gap: 14px; }
+      .family + .family { border-top: 1px dotted var(--rule); border-radius: 0; }
+      .family .zh { font-size: clamp(17px, 1.7vw, 21px); line-height: 1.25; }
+      .family .sub { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+      .family .sub .la { font-style: italic; }
+      .family .n { font-size: 13px; color: var(--ink-soft); }
+
+      .chip, .thumb {
+        background: #fff; border: 1px solid var(--rule); border-radius: 4px;
+        /* Flex, not grid: a grid track would size itself to the image's intrinsic
+           width and the sticker would spill out of its chip. */
+        display: flex; align-items: center; justify-content: center; overflow: hidden;
+      }
+      .family .chip { width: 64px; height: 64px; padding: 5px; }
+      .chip img, .thumb img { width: 100%; height: 100%; object-fit: contain; }
+
+      .species { padding: 10px 10px 12px; display: flex; flex-direction: column; gap: 10px; }
+      /* A 444-species family must not lay out every tile before the first paint. */
+      .species { content-visibility: auto; contain-intrinsic-size: 200px; }
+      .species .chip { aspect-ratio: 1; padding: 12px; }
+      .species .names { display: flex; flex-direction: column; gap: 2px; }
+      .species .py { font-size: 11px; letter-spacing: 0.06em; color: var(--ink-soft); }
+      .species .zh { font-size: clamp(16px, 1.5vw, 19px); line-height: 1.25; }
+      .species .en { font-size: 13px; color: var(--ink-soft); }
+      .species .sci { font-size: 11px; font-style: italic; color: var(--ink-soft); }
+      .species .links { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; }
+      .species .links a {
+        font-size: 11px; letter-spacing: 0.06em; text-decoration: none;
+        border: 1px solid var(--rule); border-radius: 999px; padding: 2px 9px;
+        color: var(--ink-soft);
+      }
+      .species .links a:hover, .species .links a:focus-visible { color: var(--ink); border-color: var(--ink); }
+
+      footer { color: var(--ink-soft); font-size: 11px; letter-spacing: 0.06em; }
+      a { color: var(--accent); }
+      @media (prefers-color-scheme: dark) {
+        :root { color-scheme: dark; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="sheet">
+      <header>
+        <h1>分类<small>Taxonomy · IOC World Bird List v15.2</small></h1>
+        <a class="nav" href="/">← 返回帧 Frame</a>
+      </header>
+
+      <nav id="crumbs" class="crumbs" aria-label="分层面包屑"></nav>
+
+      <main>
+        <p id="note" class="note" hidden></p>
+        <div id="view"></div>
+      </main>
+
+      <footer>
+        stickers: <a href="https://github.com/alchaincyf/huashu-bird-sticker" target="_blank" rel="noopener">花叔 huashu-bird-sticker</a>
+        (PolyForm Shield 1.0.0) · names: IOC World Bird List v15.2 (CC BY 3.0) · data: MIT
+      </footer>
+    </div>
+
+    <script type="module">
+      const view = document.getElementById("view");
+      const crumbs = document.getElementById("crumbs");
+      const note = document.getElementById("note");
+
+      /* One fetch on load; every level after that is client-side, and the level
+         lives in the hash so a reload lands on the same family. */
+      let data = null;
+
+      const stickerSrc = (o, f, i) => `/img/sticker/${o}/${f}/${i}.webp`;
+      const at = () => location.hash.slice(1).split("/").filter(Boolean).map(decodeURIComponent);
+      const go = (...parts) => (location.hash = parts.map(encodeURIComponent).join("/"));
+
+      const el = (tag, cls, text) => {
+        const n = document.createElement(tag);
+        if (cls) n.className = cls;
+        if (text != null) n.textContent = text;
+        return n;
+      };
+      const pic = (cls, src, alt) => {
+        const box = el("div", cls);
+        const img = el("img");
+        img.loading = "lazy";
+        img.src = src;
+        img.alt = alt;
+        box.append(img);
+        return box;
+      };
+      /* Links are built from fixed hosts; the article/taxon id is a bonus, the
+         search is the always-works fallback. */
+      const wikiHref = (s) =>
+        s.w
+          ? `https://zh.wikipedia.org/wiki/${encodeURIComponent(s.w)}`
+          : `https://zh.wikipedia.org/w/index.php?search=${encodeURIComponent(s.zh || s.i.replace(/_/g, " "))}`;
+      const inatHref = (s) => (s.n ? `https://www.inaturalist.org/taxa/${s.n}?locale=zh-CN` : null);
+      const link = (href, text) => {
+        const a = el("a", null, text);
+        a.href = href;
+        a.target = "_blank";
+        a.rel = "noopener";
+        return a;
+      };
+
+      /* The pinyin of a 目/科 name, over it: the payload carries it, romanized by
+         the server when the index was built. */
+      const pyLine = (py) => (py ? [el("div", "py", py)] : []);
+
+      function orderCard(o) {
+        const card = el("button", "order");
+        card.dataset.o = o.o;
+        const names = el("div", "names");
+        names.append(
+          ...pyLine(o.py),
+          el("div", "zh", o.zh || o.o),
+          el("div", "la", o.o),
+          el("div", "n", `${o.n.toLocaleString()} 种`),
+        );
+        card.append(names);
+        // Variety beats three thrushes: one species from each of the first families.
+        const thumbs = el("div", "thumbs");
+        for (const f of o.families.slice(0, 3)) {
+          thumbs.append(pic("thumb", stickerSrc(o.o, f.f, f.s[0].i), ""));
+        }
+        card.append(thumbs);
+        return card;
+      }
+
+      function familyRow(order, f) {
+        const row = el("button", "family");
+        row.dataset.f = f.f;
+        const mid = el("div", "names");
+        const sub = el("div", "sub", `${f.en} · `);
+        sub.append(el("span", "la", f.f));
+        mid.append(...pyLine(f.py), el("div", "zh", f.zh || f.f), sub);
+        row.append(
+          pic("chip", stickerSrc(order, f.f, f.s[0].i), ""),
+          mid,
+          el("div", "n", `${f.n.toLocaleString()} 种`),
+        );
+        return row;
+      }
+
+      function tile(order, family, s) {
+        const box = el("article", "species");
+        const names = el("div", "names");
+        // Pinyin sits over the Chinese name, as on the frame's cards.
+        if (s.py) names.append(el("div", "py", s.py));
+        // A recent split has no Chinese name: show the English one in its place,
+        // and never an empty line under it.
+        if (s.zh) names.append(el("div", "zh", s.zh), el("div", "en", s.en));
+        else names.append(el("div", "zh", s.en));
+        names.append(el("div", "sci", s.i.replace(/_/g, " ")));
+        const links = el("div", "links");
+        links.append(link(wikiHref(s), "维基百科"));
+        const inat = inatHref(s);
+        if (inat) links.append(link(inat, "iNaturalist"));
+        box.append(pic("chip", stickerSrc(order, family, s.i), s.en), names, links);
+        return box;
+      }
+
+      function render() {
+        if (!data) return;
+        const parts = at();
+        const order = data.orders.find((o) => o.o === parts[0]);
+        const family = order && order.families.find((f) => f.f === parts[1]);
+
+        const trail = [{ text: "全部", hash: "#" }];
+        if (order) trail.push({ text: order.zh || order.o, hash: `#${encodeURIComponent(order.o)}` });
+        if (family) {
+          trail.push({
+            text: family.zh || family.f,
+            hash: `#${encodeURIComponent(order.o)}/${encodeURIComponent(family.f)}`,
+          });
+        }
+        const kids = [];
+        trail.forEach((c, i) => {
+          if (i) kids.push(el("span", "sep", "/"));
+          if (i === trail.length - 1) kids.push(el("span", null, c.text));
+          else {
+            const a = el("a", null, c.text);
+            a.href = c.hash;
+            kids.push(a);
+          }
+        });
+        crumbs.replaceChildren(...kids);
+
+        // Species stay in the payload's order: IOC sequence, never re-sorted.
+        // A hash change keeps the scroll position, which would drop a click on an
+        // order into the middle of its family list.
+        scrollTo(0, 0);
+        if (family) {
+          view.className = "species-grid";
+          view.replaceChildren(...family.s.map((s) => tile(order.o, family.f, s)));
+        } else if (order) {
+          view.className = "list-grid";
+          view.replaceChildren(...order.families.map((f) => familyRow(order.o, f)));
+        } else {
+          view.className = "";
+          view.replaceChildren(...data.orders.map(orderCard));
+        }
+      }
+
+      view.addEventListener("click", (e) => {
+        const o = e.target.closest("[data-o]");
+        if (o) return go(o.dataset.o);
+        const f = e.target.closest("[data-f]");
+        if (f) go(at()[0], f.dataset.f);
+      });
+      addEventListener("hashchange", render);
+      render();
+
+      (async () => {
+        note.textContent = "载入中 — loading the species index …";
+        try {
+          const res = await fetch("/api/taxonomy");
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            note.hidden = false;
+            note.textContent =
+              "分类数据不可用 — 索引文件 assets/stickers.json 缺失或无法读取。" +
+              (body.asset ? ` (${body.asset})` : "");
+            return;
+          }
+          data = body;
+          note.hidden = true;
+          render();
+        } catch (err) {
+          note.hidden = false;
+          note.textContent = `分类数据不可用 — 索引文件 assets/stickers.json 无法读取。( ${err.message} )`;
+        }
+      })();
+    </script>
+  </body>
+</html>

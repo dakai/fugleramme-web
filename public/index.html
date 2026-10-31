@@ -95,6 +95,13 @@
         letter-spacing: 0.08em;
       }
       .toggle button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+      .controls .nav {
+        font: inherit; font-size: clamp(12px, 1.2vw, 16px); padding: 8px 20px;
+        border: 1px solid var(--ink); border-radius: 999px; background: var(--card);
+        color: var(--ink); text-decoration: none; letter-spacing: 0.08em; cursor: pointer;
+      }
+      .controls .nav:hover, .controls .nav:focus-visible { background: var(--ink); color: var(--paper); }
+      .controls .nav:disabled { opacity: 0.55; cursor: default; }
       select {
         font: inherit;
         font-size: clamp(12px, 1.2vw, 15px);
@@ -145,7 +152,7 @@
       }
       .names .zh { font-size: clamp(20px, 2vw, 27px); line-height: 1.2; }
       .names .en { font-size: clamp(13px, 1.3vw, 17px); color: var(--ink); margin-top: 2px; }
-      .names .py { font-size: clamp(11px, 1.1vw, 13px); color: var(--ink-soft); letter-spacing: 0.06em; margin-top: 3px; }
+      .names .py { font-size: clamp(11px, 1.1vw, 13px); color: var(--ink-soft); letter-spacing: 0.06em; margin-bottom: 1px; }
       .foot {
         display: flex; justify-content: space-between; align-items: center; gap: 8px;
         font-size: 11px; color: var(--ink-soft);
@@ -196,6 +203,9 @@
         background: var(--sheet);
         box-shadow: 0 2px 10px rgba(44, 38, 32, 0.16);
       }
+      /* A sticker is already cut to the bird with its own white outline, so the sheet
+         is white: no paper tone, no paper flattening (onPaper is plate-only). */
+      .collage.sticker { --sheet: #ffffff; }
       .collage .cell {
         display: flex; flex-direction: column; align-items: center;
         /* max-content: a plate is never squeezed to fit, so it is never cropped. */
@@ -203,6 +213,9 @@
       }
       .collage .shot {
         display: flex; align-items: flex-end; justify-content: center;
+        /* A collage picture has no box of its own: the sheet is the background,
+           for a plate's flattened paper and for a sticker's white outline alike. */
+        background: none;
         /* Give the image row its full height. Otherwise flex sizing can shrink
            this wrapper while leaving the image at --h, so its top overflows
            the row and is clipped by the collage sheet. */
@@ -277,7 +290,10 @@
         <div class="toggle" role="group" aria-label="Image style">
           <button id="mode-photo" aria-pressed="true">照片 Photo</button>
           <button id="mode-plate" aria-pressed="false">插画 Illustration</button>
+          <button id="mode-sticker" aria-pressed="false">贴纸 Sticker</button>
         </div>
+        <a class="nav" href="/categories.html">分类 Categories</a>
+        <button id="refresh" class="nav" title="重新读取检测器 re-read the station">⟳ 刷新 Refresh</button>
         <select id="hours" aria-label="Time window">
           <option value="6">近 6 小时 · 6h</option>
           <option value="24" selected>近 24 小时 · 24h</option>
@@ -312,7 +328,9 @@
         detections from a self-hosted BirdNET-Go ·
         plates: <a href="https://github.com/arnegiacomo/fugleramme" target="_blank" rel="noopener">fugleramme</a>
         (CC BY-SA 4.0) · photos &amp; 中文名: iNaturalist · bird sizes: AVONET
-        (Tobias et al. 2022, CC BY 4.0)
+        (Tobias et al. 2022, CC BY 4.0) ·
+        stickers: <a href="https://github.com/alchaincyf/huashu-bird-sticker" target="_blank" rel="noopener">huashu-bird-sticker</a>
+        (PolyForm Shield 1.0.0) · names: IOC World Bird List (CC BY 3.0)
       </footer>
     </div>
 
@@ -328,6 +346,7 @@
       const frameNext = document.getElementById("frame-next");
       const framePdf = document.getElementById("frame-pdf");
       const sortEl = document.getElementById("sort");
+      const refreshEl = document.getElementById("refresh");
       /* Which birds lead the grid: freshest, most often heard, or the ones you
          almost never see. Ties fall back to the freshest so the order is stable. */
       const SORTS = {
@@ -351,7 +370,7 @@
       applyMode();
 
       function applyMode() {
-        for (const m of ["plate", "photo"]) {
+        for (const m of ["plate", "photo", "sticker"]) {
           document.getElementById(`mode-${m}`).setAttribute("aria-pressed", String(m === mode));
         }
         localStorage.setItem("fugleramme.mode", mode);
@@ -359,10 +378,20 @@
       }
       document.getElementById("mode-plate").onclick = () => { mode = "plate"; applyMode(); };
       document.getElementById("mode-photo").onclick = () => { mode = "photo"; applyMode(); };
+      document.getElementById("mode-sticker").onclick = () => { mode = "sticker"; applyMode(); };
       hoursEl.onchange = () => {
         hours = Number(hoursEl.value);
         localStorage.setItem("fugleramme.hours", String(hours));
         load();
+      };
+      /* Nothing polls. The station is re-read when this is pressed (which also
+         bypasses the server's 20 s frame cache) and on a time-window change. */
+      refreshEl.onclick = async () => {
+        refreshEl.disabled = true;
+        refreshEl.textContent = "⟳ 刷新中… refreshing";
+        await load(true);
+        refreshEl.disabled = false;
+        refreshEl.textContent = "⟳ 刷新 Refresh";
       };
       // The grid is the one list a visitor re-orders; the illustration frame
       // keeps its own size order, so the sorter follows the mode.
@@ -415,8 +444,8 @@
             <span class="tag">${tag}</span>
           </div>
           <div class="names">
-            <div class="zh">${label}</div>
             ${bird.pinyin ? `<div class="py">${bird.pinyin}</div>` : ""}
+            <div class="zh">${label}</div>
             <div class="en">${bird.en}</div>
             <div class="sci">${bird.sci}</div>
           </div>
@@ -432,7 +461,7 @@
           </div>`;
         const play = el.querySelector(".play");
         play.onclick = (e) => togglePlay(bird, e.currentTarget);
-        // The 30 s poll replaces every card: hand the live clip's state to the new button.
+        // A refresh replaces every card: hand the live clip's state to the new button.
         if (clip && clip.dataset.id === String(bird.id) && !clip.ended) showPlay(play, clip);
         const drop = el.querySelector(".drop");
         if (drop) drop.onclick = () => dropDetection(bird, drop);
@@ -440,9 +469,9 @@
       }
 
       /* One collage cell: the cut-out alone on the page, captioned underneath.
-         No photo fallback and no buttons — a species fugleramme has no plate
-         for is left out of the illustration frame entirely, and the photo view
-         stays the place to play or delete a call. */
+         No photo fallback and no buttons — a species the source has no picture
+         for is left out of the sheet entirely, and the photo view stays the
+         place to play or delete a call. */
       function cell(bird, weight) {
         const el = document.createElement("article");
         el.className = "cell";
@@ -450,14 +479,16 @@
         /* --h is the bird's size as a multiple of an average bird; CSS turns it
            into a fraction of the sheet's height, so screen and paper agree. */
         el.style.setProperty("--h", weight.toFixed(3));
-        const url = bird.plateUrl;
+        const url = mode === "sticker" ? bird.stickerUrl : bird.plateUrl;
         const img = new Image();
         img.loading = "lazy";
         img.alt = bird.zh || bird.en;
         img.src = url;
-        img.addEventListener("load", () => { img.src = onPaper(url, img); refit(); }, { once: true });
-        // A plate that will not load takes its cell with it, or the frame keeps a
-        // hole and never fits, since the fit waits on every image's own size.
+        // A sticker needs no paper pass: its outline is already white.
+        if (mode === "sticker") img.addEventListener("load", refit, { once: true });
+        else img.addEventListener("load", () => { img.src = onPaper(url, img); refit(); }, { once: true });
+        // A picture that will not load takes its cell with it, or the frame keeps
+        // a hole and never fits, since the fit waits on every image's own size.
         img.addEventListener("error", () => { el.remove(); refit(); }, { once: true });
         const el2 = document.createElement("div");
         el2.className = "shot";
@@ -495,7 +526,7 @@
 
          PAPER is fugleramme's TARGET_PAPER, and it must stay equal to the
          sheet's --sheet, or every plate reads as a rectangle again. Done once
-         per plate; the 30 s poll reuses the result. PNG, not webp: the halo is
+         per plate; every re-render reuses the result. PNG, not webp: the halo is
          a flat tone now, and a lossy re-encode stipples it. */
       const PAPER = [242, 237, 226];
       const RING = 8;      // px: how far out to look for the plate's cut edge
@@ -610,12 +641,15 @@
          Ordered by `birdSize` — the bird alone — because `size` carries the plate's
          slack too, and a wren on a leaf-heavy plate would otherwise lead the sheet. */
       function collageFrame(birds) {
+        /* A plate is drawn at body mass x the plate's own slack (`size`); a sticker
+           is cut to the bird already, so the bird's own mass term is its size. */
+        const weight = mode === "sticker" ? (b) => b.birdSize ?? 1 : (b) => b.size;
         // Against the frame's biggest plate, not its mean: the tallest plate is
         // then always --h 1, which is what bounds the sheet to one A4 page.
-        const max = Math.max(...birds.map((b) => b.size), 0) || 1;
+        const max = Math.max(...birds.map(weight), 0) || 1;
         return [...birds]
           .sort((a, b) => (b.birdSize ?? b.size) - (a.birdSize ?? a.size))
-          .map((b) => cell(b, b.size / max));
+          .map((b) => cell(b, weight(b) / max));
       }
 
       /* A frame fills its sheet, whatever it holds. Twelve birds are two rows or
@@ -698,29 +732,34 @@
       function render(data) {
         last = data;
         const birds = data ? data.birds : [];
-        const plate = mode === "plate";
-        // The illustration frame shows only what fugleramme actually drew.
-        const drawn = plate ? birds.filter((b) => b.plateUrl) : birds;
+        const sheet = mode !== "photo";
+        // A sheet shows only what its own source actually has: a plate the library
+        // drew, or a sticker.
+        const drawn =
+          mode === "plate" ? birds.filter((b) => b.plateUrl)
+          : mode === "sticker" ? birds.filter((b) => b.stickerUrl)
+          : birds;
         const frames = Math.max(1, Math.ceil(drawn.length / PER_FRAME));
         frame = Math.min(Math.max(frame, 0), frames - 1);
-        grid.hidden = plate;
-        collage.hidden = !plate;
-        framesEl.hidden = !plate;
-        sortEl.hidden = plate;
+        grid.hidden = sheet;
+        collage.hidden = !sheet;
+        framesEl.hidden = !sheet;
+        sortEl.hidden = sheet;
         framePrev.disabled = frame === 0;
         frameNext.disabled = frame >= frames - 1;
         frameLabel.textContent = `第 ${frame + 1} / ${frames} 帧`;
-        grid.replaceChildren(...(plate || !data ? [] : [...birds].sort(SORTS[sortEl.value]).map(card)));
-        // Only in plate mode: the sheet is hidden in photo mode, and building it
-        // anyway minted cells (and a /null image request each) for every bird with
-        // no plate, on every 30 s poll.
+        grid.replaceChildren(...(sheet || !data ? [] : [...birds].sort(SORTS[sortEl.value]).map(card)));
+        // Only for a sheet: it is hidden in photo mode, and building it anyway
+        // minted cells (and a /null image request each) for every bird with no
+        // picture, on every refresh.
+        collage.classList.toggle("sticker", mode === "sticker");
         collage.replaceChildren(
-          ...(plate ? collageFrame(drawn.slice(frame * PER_FRAME, (frame + 1) * PER_FRAME)) : []),
+          ...(sheet ? collageFrame(drawn.slice(frame * PER_FRAME, (frame + 1) * PER_FRAME)) : []),
         );
-        if (plate) fitFrame();
+        if (sheet) fitFrame();
         // The empty state belongs to the view on screen: photo mode is never
         // empty just because no species has a plate.
-        empty.hidden = !data || (plate ? drawn.length : birds.length) > 0;
+        empty.hidden = !data || (sheet ? drawn.length : birds.length) > 0;
         if (data) {
           document.getElementById("species").textContent = birds.length;
           document.getElementById("calls").textContent =
@@ -737,9 +776,12 @@
         }
       }
 
-      async function load() {
+      /** `fresh` asks the server to rebuild instead of answering its 20 s cache. */
+      async function load(fresh = false) {
         try {
-          const res = await fetch(`/api/frame?hours=${hours}`, { cache: "no-store" });
+          const res = await fetch(`/api/frame?hours=${hours}${fresh ? "&refresh=1" : ""}`, {
+            cache: "no-store",
+          });
           const body = await res.json();
           if (!res.ok) throw new Error(body.error || res.status);
           render(body);
@@ -752,9 +794,9 @@
         }
       }
 
+      // No polling: the frame is read on load, when the window changes, and when
+      // ⟳ 刷新 Refresh is pressed. A kiosk left alone keeps the frame it has.
       load();
-      setInterval(load, 30000);
-      document.addEventListener("visibilitychange", () => !document.hidden && load());
       // The sheet's box follows the window, so the frame's fit does too.
       addEventListener("resize", refit);
     </script>

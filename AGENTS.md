@@ -4,35 +4,40 @@
 
 fugleramme-web is a kiosk picture frame for a self-hosted [BirdNET-Go](https://github.com/tphakala/birdnet-go)
 station. It reads recent acoustic detections, groups them per species, and renders one
-page of cards — 1800s fugleramme plates or real iNaturalist photos, named in Chinese
-(plus tone-marked pinyin) and English. Everything is cached to disk under `DATA_DIR`,
-so once a species has been seen the frame works with the internet unplugged.
+page of cards — 1800s fugleramme plates, real iNaturalist photos, or huashu stickers,
+named in Chinese (plus tone-marked pinyin) and English. A second page, 分类
+`/categories.html`, browses the whole 11,064-species sticker library by order and family.
+Everything is cached to disk under `DATA_DIR`, so once a species has been seen the frame
+works with the internet unplugged.
 
-Two source files carry the whole app: `server.mjs` (backend) and `public/index.html`
-(frontend). No framework, no build step.
+Three files carry the whole app: `server.mjs` (backend), `public/index.html` (frame) and
+`public/categories.html` (taxonomy). No framework, no build step.
 
 ## Architecture & Data Flow
 
 ```
 GET /api/frame?hours=N
-  └─ handle()            server.mjs:278   clamp hours to 1…168
-      └─ buildFrame()    server.mjs:240   20 s in-memory frameCache
+  └─ handle()            server.mjs:455   clamp hours to 1…168
+      └─ buildFrame()    server.mjs:374   20 s in-memory frameCache
           ├─ GET {BIRDNA}/api/v2/detections?limit=500
-          ├─ groupDetections(rows, since)  server.mjs:177   dedupe per scientificName
-          ├─ enrich(birds)                 server.mjs:201   Promise.all fan-out
-          │    ├─ cached() manifest + birdnet_aliases.json  (fugleramme raw GitHub)
+          ├─ groupDetections(rows, since)  server.mjs:287   dedupe per scientificName
+          ├─ enrich(birds)                 server.mjs:316   Promise.all fan-out
+          │    ├─ cached() manifest + birdnet_aliases + geometry  (fugleramme raw GitHub)
           │    ├─ plateFor()  → downloads into DIRS.art     (/img/art/…)
+          │    ├─ stickerIndex() → byId map, from assets/stickers.json (vendored)
+          │    │                 (/img/sticker/…, /api/taxonomy)
           │    └─ resolveTaxon() → iNaturalist locale=zh-CN + zh/en Wikipedia
-          │         all three via read-through disk cache `cached()` (server.mjs:68)
+          │         all of it via read-through disk cache `cached()` (server.mjs:74)
           └─ GET {BIRDNA}/api/v2/system/info  → `station` (failure tolerated, `{}`)
 ```
 
 Static serving (`handle()` tail): `/` → `public/index.html` (`STATIC_FALLBACK`,
-server.mjs:261), `/img/<art|photo>/<file>` → `DIRS[kind]` with `path.basename()`
+server.mjs:399), `/img/<art|photo>/<file>` → `DIRS[kind]` with `path.basename()`
 re-applied, everything else resolves inside `PUBLIC_DIR` with a
-`file.startsWith(PUBLIC_DIR)` traversal guard (server.mjs:310).
+`file.startsWith(PUBLIC_DIR)` traversal guard. `/categories.html` needs no route of its own:
+it is a static file in `PUBLIC_DIR`.
 
-`handle()` also owns the two per-card actions:
+`handle()` also owns the two per-card actions and the two sticker routes:
 
 - `GET /api/audio/<detectionId>` — proxies `{BIRDNA}/api/v2/audio/:id`. Upstream `503`
   means the clip is still being written, `404` means it is gone; both pass through
@@ -40,14 +45,26 @@ re-applied, everything else resolves inside `PUBLIC_DIR` with a
 - `DELETE /api/detection/<detectionId>` — drops the record upstream via
   `birdnetWrite()`, then nulls `frameCache` so the deleted bird cannot reappear from
   the 20 s cache.
+- `GET /api/taxonomy` — `(await stickerIndex()).data` as JSON, gzip-compressed when
+  `accept-encoding` allows it (1,387,295 B → 311,152 B). Built once per process into
+  `taxonomyBody`, never fetched: it reads the vendored `assets/stickers.json`.
+  `cache-control: public, max-age=300` — the payload is immutable per build, but a deploy
+  must not be invisible for an hour. 503 with `{ error, asset }` only when that file is
+  missing from the deployment.
+- `GET /img/sticker/<Order>/<Family>/<Genus_species>.webp` — validated by the route's own
+  regex (`[A-Za-z]+`, `[A-Za-z_]+\.webp`), so no `path.basename()` re-application and no
+  traversal; read-through download into `DIRS.sticker`.
 
 Frontend: one inline `<script type="module">` in `public/index.html`, no imports, no CDN.
-`load()` polls `/api/frame` every 30 s, rebuilds the grid with `grid.replaceChildren(...)`,
-and keeps `mode`/`hours` in `localStorage` keys `fugleramme.mode` / `fugleramme.hours`.
+`load(fresh)` reads `/api/frame` once on load, on a time-window change, and when `⟳ 刷新
+Refresh` is pressed — **there is no polling timer and no visibility reload**; `fresh` adds
+`?refresh=1` so the button rebuilds past the server's 20 s cache. `render()` rebuilds the
+grid with `grid.replaceChildren(...)`, and `mode`/`hours` live in `localStorage` keys
+`fugleramme.mode` / `fugleramme.hours`.
 Outbound links pass through `safeUrl()` — only `https:` URLs on `wikipedia.org` /
 `inaturalist.org` reach `href`. One shared `Audio` object backs every card's recorder;
 `showPlay(btn, el)` is the single place that writes its label and its `--p` progress
-custom property, so the 30 s re-render calls it once for the card still playing.
+custom property, so a refresh calls it once for the card still playing.
 
 `mode === "plate"` renders the **collage**, not the card grid: `PER_FRAME = 12` birds per
 frame, no buttons, no links, no pinyin, and species with no plate left out entirely.
@@ -56,6 +73,18 @@ English/中文名. `collageFrame()` sorts by `birdSize` — the bird's own mass 
 `size`, which carries the plate's slack and would let a wren on a leaf-heavy plate lead
 the sheet — and scales each plate against the frame's **biggest** plate, so `--h` 1 is
 always the tallest one.
+
+`mode === "sticker"` uses the same sheet, the same cell and the same paging, and differs in
+exactly three places, all keyed off `sheet = mode !== "photo"`:
+
+- `drawn` filters on `stickerUrl` instead of `plateUrl`;
+- `cell()` skips `onPaper()` — a sticker is already cut to its bird on a white outline —
+  and `.collage.sticker { --sheet: #fff }` makes the paper white so screen and print agree;
+- `collageFrame()`'s weight is `bird.birdSize` (no plate slack to compensate for); the sort
+  stays on `birdSize`, so the two sheets order identically.
+
+`.collage .shot` must stay `background: none` — `.shot`'s cream box is for the photo grid's
+plate fallback, and on the sheet it painted a rectangle behind every sticker.
 
 **The screen sheet is the paper sheet.** `.collage` is an A4 landscape box — `container-type:
 size`, `aspect-ratio: 297/210`, `--sheet` background — and every size inside it is in `cqh`
@@ -80,6 +109,25 @@ must stay one page after any change here.
 `⤓ A4 PDF` calls `window.print()`. That and the `@media print` block are the whole export
 feature — no PDF library, nothing to install.
 
+**`/categories.html` is a separate, self-contained page.** One `fetch("/api/taxonomy")` on
+load; every level after that is client-side and lives in the URL hash
+(`#<Order>` → `#<Order>/<Family>`), so `hashchange` drives one `render()` and a reload lands
+on the same family. Three views share `#view`: order cards (`auto-fill minmax(250px,1fr)`),
+family rows (`list-grid`, one column, `64px 1fr auto`), species tiles
+(`species-grid`, `auto-fill minmax(168px,1fr)`). Species keep the payload's IOC order —
+never re-sort. Each tile is sticker → pinyin → 中文名 → English → 学名 → links; the pinyin
+is the library's own (`s.py`, 11,041 of 11,064), the wiki link is the article when
+`s.w` is known and a zh-wikipedia search otherwise (a name search redirects to the article,
+verified), and the iNaturalist link only exists when `s.n` carries a taxon id (661) —
+there is no iNaturalist search URL in use because one could not be verified behind
+Cloudflare. The 目 and 科 headings carry pinyin too, but the library has none for a taxon's
+own name, so `taxonomyIndex()` romanizes those 294 strings with `toPinyin` when the index is
+built. `render()` scrolls to top because a hash change otherwise keeps the previous
+view's scroll position and drops a click into the middle of a family list. `.chip`/`.thumb`
+are flex, not grid: a grid track sizes itself to the image's intrinsic width and the sticker
+spills out of its box. It copies `index.html`'s tokens but no handwriting face, and is
+`lang="zh-Hans"` (all its names are Simplified; the frame page's `zh-Hant` is untouched).
+
 **Bird size is fugleramme's rule, ported, and it is two numbers.** `massWeight(sci)` = AVONET
 body mass (`assets/bird-masses.json`, vendored, CC BY 4.0 — Tobias et al. 2022) ** 0.14
 against the table median: the bird's own size, published as `bird.birdSize` and the frame's
@@ -96,7 +144,7 @@ its plate and one swimming in paper draw the same bird.
 plate carries a ring of its own scan paper around the bird ("halo"), and the plates' paper
 runs from (240,236,230) to (232,217,196) — so a sheet drawn at one tone shows every plate
 as a pasted rectangle. It runs once per plate (cached in `flattened`, reused by every
-30 s poll) and does four things:
+re-render) and does four things:
 
 1. **measure the plate's own tone** — the median colour of the paper just inside its cut
    edge. There is no fixed answer to measure against, which is why `PAPER` alone is not
@@ -164,20 +212,30 @@ cell removed instead — a frame keeps no holes, and the fit does not wait on it
 - **`groupDetections` keeps the newest detection's `id`** on the group, because the
   recorder and the delete both address one record, not a species. A row without an `id`
   leaves `bird.id === null`, and the card then renders neither button enabled.
-- **The collage is only built in plate mode**, and the empty state is decided by the view
-  on screen (`plate ? drawn.length : birds.length`). Both were computed from the plate list
-  regardless of mode, so photo mode — the default — minted a hidden sheet for every bird,
-  each `img` without a plate asking for `/null`, on every 30 s poll.
+- **The collage is only built for a sheet** (`mode !== "photo"`), and the empty state is
+  decided by the view on screen (`sheet ? drawn.length : birds.length`). Both were computed
+  from the plate list regardless of mode, so photo mode — the default — minted a hidden
+  sheet for every bird, each `img` without a plate asking for `/null`, on every refresh.
+- **`assets/stickers.json` is generated, never hand-edited.** It is the sticker library's
+  33 MB `species.json` trimmed by `taxonomyIndex()` — the only place that shape is defined —
+  and `test.mjs` pins the trim. Regenerating is one documented command (README, "Where the
+  pictures and names come from"); running it today reproduces the committed file
+  byte-for-byte (sha256 `dbae7880…`). It is in the image because the Dockerfile copies
+  `assets/`, so a deploy never downloads it, and deleting it is the only way to reach the
+  503 branch.
+- **Sticker images come from `STICKER_RAW` but the taxonomy does not.** The `wikiHref`
+  fallback (a zh-wikipedia *search*) and the article links both use fixed hosts; there is no
+  user input in a href on that page.
 
 ## Key Directories
 
 | path | purpose |
 | --- | --- |
-| `server.mjs` | entire backend: config, disk cache, plate/taxon/detection logic, router |
-| `public/` | entire frontend: `index.html` plus the vendored `fonts/mashanzheng.woff2` |
-| `data/` | generated cache (`art/`, `photo/`, `json/`) — gitignored, `DATA_DIR` override |
+| `server.mjs` | entire backend: config, disk cache, plate/sticker/taxon/detection logic, router |
+| `public/` | the frame (`index.html`), the taxonomy browser (`categories.html`), vendored `fonts/mashanzheng.woff2` |
+| `data/` | generated cache (`art/`, `photo/`, `taxon/`, `sticker/`, `json/`) — gitignored, `DATA_DIR` override |
 | `.github/workflows/` | one workflow: build + push the multi-arch image |
-| `assets/` | vendored `bird-masses.json` (AVONET grams) — read once at startup |
+| `assets/` | vendored data read at runtime: `bird-masses.json` (AVONET grams) and `stickers.json` (the sticker library's trimmed taxonomy) |
 
 ## Development Commands
 
@@ -194,7 +252,7 @@ running the server and loading the page.
 | --- | --- | --- |
 | `BIRDNA_URL` | `http://192.168.10.207:8080` | detector base URL (trailing `/` stripped) |
 | `PORT` | `8090` | listen port |
-| `DATA_DIR` | `./data` (`/data` in the image) | plate/photo/taxon cache root |
+| `DATA_DIR` | `./data` (`/data` in the image) | plate/photo/taxon/sticker cache root |
 | `FETCH_TIMEOUT_MS` | `20000` | `AbortSignal.timeout` for every outbound fetch |
 
 ## Code Conventions & Common Patterns
@@ -203,7 +261,8 @@ Observed style — match it, there is no formatter config to arbitrate:
 
 - ESM only (`.mjs`, `"type": "module"`), 2-space indent, double quotes, semicolons,
   trailing commas in multi-line literals, numeric separators (`3600_000`).
-- Section banners `/* ---- plates */` (server.mjs:83, 108, 175, 236, 259, 315) and a
+- Section banners `/* ---- plates */` (server.mjs:92 plates, 117 stickers, 182 bird size,
+  218 taxon, 285 detection, 370 frame, 397 serve, 419 recorder/triage, 567 main) and a
   one-line JSDoc on anything non-obvious (`/** Read-through disk cache. ... */`).
 - One-function-per-concern, arrow consts for tiny pure helpers
   (`export const kebab = (s) => ...`, `englishWiki`, `toPinyin`).
@@ -221,9 +280,11 @@ Observed style — match it, there is no formatter config to arbitrate:
 
 | file | role |
 | --- | --- |
-| `server.mjs` | entry point + whole backend; sectioned plates / taxon / detection / frame / serve |
-| `public/index.html` | whole frontend (inline CSS tokens + module script) |
-| `test.mjs` | the entire test suite (61 lines) |
+| `server.mjs` | entry point + whole backend; sectioned plates / stickers / bird size / taxon / detection / frame / serve |
+| `public/index.html` | the frame page (inline CSS tokens + module script) |
+| `public/categories.html` | the 分类 page: same tokens, one `render()` over the URL hash |
+| `assets/stickers.json` | the sticker library's trimmed taxonomy, generated (see the invariants above) — 1.4 MB |
+| `test.mjs` | the entire test suite (134 lines) |
 | `package.json` | scripts, `engines.node >= 20`, the single dep |
 | `Dockerfile` | `node:22-alpine`, `npm ci --omit=dev`, `EXPOSE 8090`, `/data` volume, wget healthcheck; copies **only** `server.mjs` + `assets/` + `public/` |
 | `compose.yaml` | TrueNAS deploy: `ghcr.io/dakai/fugleramme-web:latest`, `8090:8090`, `./data:/data` |
@@ -234,7 +295,8 @@ Observed style — match it, there is no formatter config to arbitrate:
 - **Node ≥ 20** (`engines`), **Node 22 Alpine** in the image. Top-level `await` is used
   — do not transpile or target an older baseline.
 - **npm** with `lockfileVersion: 3`; `npm ci` in Docker. Do not add a second lockfile.
-- **Exactly one runtime dependency: `pinyin-pro`** (MIT), used only by `toPinyin`.
+- **Exactly one runtime dependency: `pinyin-pro`** (MIT), used only by `toPinyin` — the
+  frame's cards and, at build time, the taxonomy's 目/科 names.
   Anything else must be stdlib or it does not get added — `fetch`, `AbortSignal.timeout`,
   `node:http`, `node:fs/promises` cover everything here. No devDependencies, so
   `--omit=dev` is currently a no-op.
@@ -248,7 +310,7 @@ Observed style — match it, there is no formatter config to arbitrate:
 
 `npm test` → `node test.mjs`. No framework: a flat script of top-level
 `node:assert/strict` statements that imports pure helpers from `./server.mjs` and prints
-`ok`. 24 assertions in 8 groups, all currently passing:
+`ok`. 51 top-level assertions in 10 groups, all currently passing:
 
 | covered | helper |
 | --- | --- |
@@ -258,6 +320,8 @@ Observed style — match it, there is no formatter config to arbitrate:
 | tone marks, polyphonic chars, non-Han → `null` | `toPinyin` |
 | zh Wikipedia hit / miss (network, skipped offline via try/catch) | `zhArticle` |
 | en-only URL wrap, non-en → `null` | `englishWiki` |
+| mass/slack split (`birdPx` is equal for a tight and a loose crop), unknown mass → 1 | `massWeight`, `sizeWeight` |
+| orders → families → species, IOC order, Chinese order/family names and their pinyin, a split with no Chinese name, no sticker file → not in the taxonomy, per-tile pinyin and the two ids | `taxonomyIndex` |
 
 The testable seam: importing `server.mjs` does not bind a port (entrypoint guard) and
 does not mkdir, so **only pure helpers are testable today**. `buildFrame`, `enrich`,
@@ -276,8 +340,15 @@ script changed. Pin consumer-visible behaviour (clamping, degradation, licence/a
 fields), not implementation details or incidental defaults.
 
 Because CI never runs the tests, run `npm test` yourself before pushing, and exercise
-the real page before claiming UI work: start the server, load `/`, exercise both toggle
-modes, the empty state, and the stale banner (stop the detector).
+the real page before claiming UI work: start the server, load `/`, exercise all three
+styles (照片 / 插画 / 贴纸), the empty state, the stale banner (stop the detector), and walk
+`/categories.html` down to a species grid and back.
+
+**Hash-only navigation is not a navigation.** `tab.goto`/`location.href` to a URL that
+differs only in the fragment — or is identical — keeps the current document, so a stale
+copy of the page (and of its `/api/taxonomy` response, which is cached for 5 min) looks like
+a bug in your change. Bust it with a query string or a real reload before believing a
+screenshot.
 
 ## Known Traps
 
@@ -289,12 +360,17 @@ modes, the empty state, and the stale banner (stop the detector).
   the photo and is tagged `photo fallback`. That is expected, not a bug — check
   `pickPlate(files, sci)` against the live manifest before assuming a lookup is broken.
 - **Licence wording contradicts itself.** `server.mjs:5` calls the plates
-  "public-domain artwork"; `README.md:42` and `public/index.html:198` say CC BY-SA 4.0.
+  "public-domain artwork"; `README.md` and `public/index.html` say CC BY-SA 4.0.
   CC BY-SA 4.0 is the correct one — `server.mjs:5` is the stale claim. Attribution is
   shown to users, so fix the code comment, never drop the credit.
+- **Two curated libraries, two licences, both credited on screen.** Plates are fugleramme
+  CC BY-SA 4.0; stickers are huashu-bird-sticker **PolyForm Shield 1.0.0** (free for
+  anything except a competing birding/ID app) with MIT data and IOC names under CC BY 3.0.
+  The frame's footer and the 分类 page's footer carry both, and `README.md` has the table.
+  `STICKER_RAW` and `/img/sticker` are the only places to change source.
 - **`README.md` is the only doc.** No `docs/`, `LICENSE`, `CHANGELOG`, or `CONTRIBUTING`.
   If you change behaviour, update `README.md` in the same commit — its env table, clamps,
-  poll/rebuild cadence, and licence table are all verified to match the source today, and
+  refresh/cache behaviour, and licence table are all verified to match the source today, and
   that is worth keeping true.
 - `<html lang="zh-Hant">` (index.html:2) is Traditional while all fetched names are
   Simplified (`zh-CN`). Existing, deliberate-looking, but do not "fix" one side only.

@@ -1,6 +1,6 @@
 // Run: node test.mjs
 import assert from "node:assert/strict";
-import { englishWiki, groupDetections, kebab, massWeight, pickPlate, sizeWeight, toPinyin, zhArticle } from "./server.mjs";
+import { englishWiki, groupDetections, kebab, massWeight, pickPlate, sizeWeight, taxonomyIndex, toPinyin, zhArticle } from "./server.mjs";
 
 assert.equal(kebab("Zosterops simplex"), "zosterops-simplex");
 assert.equal(kebab("  Hylopezus  "), "hylopezus");
@@ -89,5 +89,47 @@ assert.deepEqual(englishWiki("https://en.wikipedia.org/wiki/Indian_paradise_flyc
 });
 assert.equal(englishWiki("https://zh.wikipedia.org/wiki/白鹡鸰"), null);
 assert.equal(englishWiki(undefined), null);
+
+// Sticker taxonomy: the library's species.json trimmed to orders -> families ->
+// species in IOC sequence, with the Chinese order/family names carried on each
+// record. A recent split has no Chinese name (the page falls back to English),
+// and a record with no sticker file is not in the taxonomy at all.
+const taxa = taxonomyIndex([
+  { id: "Turdus_merula", taxonomy: { order: "Passeriformes", family: "Turdidae", familyEnglish: "Thrushes" },
+    names: { en: "Common Blackbird", "zh-Hans": "乌鸫" },
+    zh: { order: "雀形目", family: "鸫科", pinyin: "wū dōng", wikipedia: "https://zh.wikipedia.org/wiki/%E4%B9%8C%E9%B8%AB" },
+    ids: { inaturalist: 12716 },
+    sticker: { file: "stickers/Passeriformes/Turdidae/Turdus_merula.webp" } },
+  { id: "Turdus_pilaris", taxonomy: { order: "Passeriformes", family: "Turdidae", familyEnglish: "Thrushes" },
+    names: { en: "Song Thrush", "zh-Hans": "欧歌鸫" }, zh: { order: "雀形目", family: "鸫科" },
+    sticker: { file: "stickers/Passeriformes/Turdidae/Turdus_pilaris.webp" } },
+  { id: "Zzyzx_novum", taxonomy: { order: "Passeriformes", family: "Turdidae", familyEnglish: "Thrushes" },
+    names: { en: "Zzyzx Bird" }, zh: {}, sticker: { file: "stickers/Passeriformes/Turdidae/Zzyzx_novum.webp" } },
+  { id: "No_sticker", taxonomy: { order: "Passeriformes", family: "Turdidae" }, names: { en: "No Sticker" }, sticker: {} },
+]);
+assert.equal(taxa.orders.length, 1);
+assert.equal(taxa.orders[0].o, "Passeriformes");
+assert.equal(taxa.orders[0].zh, "雀形目");
+assert.equal(taxa.orders[0].py, "què xíng mù");   // romanized here: the library has none
+assert.equal(taxa.orders[0].n, 3);
+assert.equal(taxa.orders[0].families.length, 1);
+const turdidae = taxa.orders[0].families[0];
+assert.equal(turdidae.f, "Turdidae");
+assert.equal(turdidae.zh, "鸫科");
+assert.equal(turdidae.py, "dōng kē");
+assert.equal(turdidae.en, "Thrushes");
+assert.equal(turdidae.n, 3);
+assert.deepEqual(turdidae.s.map((s) => s.i), ["Turdus_merula", "Turdus_pilaris", "Zzyzx_novum"]);
+assert.equal(turdidae.s[1].zh, "欧歌鸫");
+assert.equal(turdidae.s[2].zh, "");       // no Chinese name: the page shows `en`
+assert.equal(turdidae.s[2].en, "Zzyzx Bird");
+// The tile's pinyin is the library's own, and the two links exist only where the
+// library knows the article / the taxon — the page falls back to a search.
+assert.equal(turdidae.s[0].py, "wū dōng");
+assert.equal(turdidae.s[0].w, "乌鸫");
+assert.equal(turdidae.s[0].n, 12716);
+assert.equal(turdidae.s[1].py, "");
+assert.equal(turdidae.s[1].w, "");
+assert.equal(turdidae.s[1].n, 0);
 
 console.log("ok");
