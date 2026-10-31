@@ -68,20 +68,24 @@ custom property, so a refresh calls it once for the card still playing.
 
 `mode === "plate"` renders the **collage**, not the card grid: `PER_FRAME = 12` birds per
 frame, no buttons, no links, no pinyin, and species with no plate left out entirely.
-`frame` is the current page, `cell(bird, weight)` draws one cut-out plus handwritten
-English/中文名. `collageFrame()` sorts by `birdSize` — the bird's own mass term, not
+`frame` is the current page, `cell(bird, weight)` draws one cut-out plus its English/中文名
+caption — handwritten on the plate sheet, the frame's serif on the sticker sheet.
+`collageFrame()` sorts by `birdSize` — the bird's own mass term, not
 `size`, which carries the plate's slack and would let a wren on a leaf-heavy plate lead
 the sheet — and scales each plate against the frame's **biggest** plate, so `--h` 1 is
 always the tallest one.
 
 `mode === "sticker"` uses the same sheet, the same cell and the same paging, and differs in
-exactly three places, all keyed off `sheet = mode !== "photo"`:
+exactly four places, all keyed off `sheet = mode !== "photo"`:
 
 - `drawn` filters on `stickerUrl` instead of `plateUrl`;
 - `cell()` skips `onPaper()` — a sticker is already cut to its bird on a white outline —
   and `.collage.sticker { --sheet: #fff }` makes the paper white so screen and print agree;
 - `collageFrame()`'s weight is `bird.birdSize` (no plate slack to compensate for); the sort
-  stays on `birdSize`, so the two sheets order identically.
+  stays on `birdSize`, so the two sheets order identically;
+- `.collage.sticker .hand { font-family: inherit }` — a sticker sheet has no 1800s plate to
+  caption, so its English and 中文名 are set in the frame's own serif, not the plates'
+  handwriting face (`Ma Shan Zheng`, which stays on the plate sheet).
 
 `.collage .shot` must stay `background: none` — `.shot`'s cream box is for the photo grid's
 plate fallback, and on the sheet it painted a rectangle behind every sticker.

@@ -137,11 +137,12 @@ does not contact the registry.
   of the sheet rather than shown as a photo. More species than that and the collage rolls
   into another frame (`◀ 第 1 / 2 帧 ▶`).
 - 贴纸 Sticker is the same sheet with a different library: up to 12 stickers on pure white
-  paper, the same handwritten names, paging and `⤓ A4 PDF`. A sticker is already cut to its
-  bird with a white outline, so the sheet is `#fff` and the paper-normalising canvas pass is
-  skipped (`onPaper` is plate-only). Stickers are drawn at the bird's own mass term — there
-  is no plate slack to compensate for — and a species the library does not cover is left out
-  of the sheet, never shown as a photo.
+  paper, the same paging and `⤓ A4 PDF`, but its English and 中文名 are set in the frame's
+  serif rather than the plates' handwriting — a sticker sheet has no 1800s plate to caption.
+  A sticker is already cut to its bird with a white outline, so the sheet is `#fff` and the
+  paper-normalising canvas pass is skipped (`onPaper` is plate-only). Stickers are drawn at
+  the bird's own mass term — there is no plate slack to compensate for — and a species the
+  library does not cover is left out of the sheet, never shown as a photo.
 - 分类 Categories (`/categories.html`) browses the whole sticker library instead of the
   last few hours: 44 orders → 250 families → 11,064 species, each 目 and 科 heading and
   each species tile carrying its tone-marked pinyin over the Chinese name, plus the English

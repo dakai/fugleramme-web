@@ -232,6 +232,9 @@
         font-family: "Ma Shan Zheng", "Kaiti SC", "STKaiti", cursive;
         line-height: 1.25; text-align: center; color: var(--ink);
       }
+      /* A sticker sheet has no 1800s plate to caption, so it takes the frame's
+         own serif instead of the plates' handwriting. */
+      .collage.sticker .hand { font-family: inherit; }
       .collage .hand.en { font-size: 2.4cqh; margin-top: 0.4em; }
       .collage .hand.zh { font-size: 3.2cqh; }
       .frames { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
